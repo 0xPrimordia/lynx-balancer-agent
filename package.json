@@ -43,7 +43,7 @@
     "langchain": "^0.3.8",
     "@hashgraph/sdk": "^2.54.0",
     "dotenv": "^16.4.5",
-    "@hashgraphonline/standards-agent-plugin": "^1.0.0"
+    "@hashgraphonline/standards-agent-plugin": "^0.0.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
