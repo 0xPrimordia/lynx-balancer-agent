@@ -1,0 +1,66 @@
+{
+  "name": "lynx-balancer-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Hedera-powered AI agent using HCS and the Hedera Agent Kit v3 + Standards Agent Plugin",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "npm run build && node dist/index.js",
+    "watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "register-agent": "tsx scripts/register-agent.ts",
+    "langchain:tool-calling-agent": "tsx src/examples/tool-calling-agent.ts",
+    "langchain:structured-chat-agent": "tsx src/examples/structured-chat-agent.ts",
+    "hybrid:agent": "tsx src/examples/hybrid-agent.ts",
+    "hybrid:manual": "tsx src/examples/manual-hybrid-agent.ts",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix"
+  },
+  "keywords": [
+    "hedera",
+    "blockchain",
+    "ai-agent",
+    "langchain",
+    "hcs",
+    "consensus-service",
+    "typescript",
+    "agent-networking",
+    "hcs-10",
+    "multi-agent",
+    "defi",
+    "portfolio-management"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "hedera-agent-kit": "^3.0.4",
+    "@langchain/openai": "^0.3.14",
+    "@langchain/core": "^0.3.24",
+    "langchain": "^0.3.8",
+    "@hashgraph/sdk": "^2.54.0",
+    "dotenv": "^16.4.5",
+    "@hashgraphonline/standards-agent-plugin": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "eslint": "^9.17.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": [
+    "dist",
+    "src",
+    "scripts",
+    "README.md",
+    "LICENSE"
+  ]
+}
