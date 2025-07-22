@@ -50,9 +50,9 @@ async function setupLynxBalancerAgent() {
     let profilePictureIncluded = false;
     
     try {
-      // First, try to register with profile picture and multiple capabilities
+      // First, try to register with profile picture (using smaller image)
       registerResponse = await kit.processMessage(
-        `Register me as an AI agent named ${agentName} with a random unique alias, capabilities DEFI and PORTFOLIO_MANAGEMENT, tags "defi,balancing,automated,trading", profile picture URL "https://hashgraphonline.com/img/logo.png", and description "Intelligent portfolio balancing agent for Hedera DeFi - automated rebalancing, yield optimization, and multi-agent coordination"`
+        `Register me as an AI agent named ${agentName} with a random unique alias, capabilities DEFI and PORTFOLIO_MANAGEMENT, tags "defi,balancing,automated,trading", profile picture URL "https://via.placeholder.com/64x64/00D4AA/FFFFFF.png?text=L", and description "Intelligent portfolio balancing agent for Hedera DeFi - automated rebalancing, yield optimization, and multi-agent coordination"`
       );
       
       profilePictureIncluded = true;
@@ -91,9 +91,6 @@ async function setupLynxBalancerAgent() {
       console.log(`📤 Outbound Topic: ${currentAgent.outboundTopicId}`);
       console.log(`👤 Profile Topic: ${currentAgent.profileTopicId || 'Not set'}`);
       console.log(`🖼️  Profile Picture: ${profilePictureIncluded ? 'Included' : 'Not included (insufficient HBAR)'}`);
-      console.log(`🏷️  Capabilities: DEFI, PORTFOLIO_MANAGEMENT`);
-      console.log(`🔖 Tags: defi, balancing, automated, trading`);
-      console.log(`🔑 Key Type: ED25519 (DER-encoded)`);
       
       console.log('\n🔧 Add these to your .env file:');
       console.log(`BALANCER_AGENT_ACCOUNT_ID=${currentAgent.accountId}`);
@@ -109,47 +106,20 @@ async function setupLynxBalancerAgent() {
         console.log('2. Use the Standards Agent Kit to update the profile picture');
       }
       
-      console.log('\n🎉 SUCCESS! ED25519 DER-encoded key works perfectly for Lynx Balancer Agent registration!');
-      
-      console.log('\n🌐 Agent Discovery:');
-      console.log('Your agent is now discoverable by other agents searching for:');
-      console.log('  • Capability: DEFI or PORTFOLIO_MANAGEMENT');
-      console.log('  • Tags: defi, balancing, automated, trading');
-      console.log('  • Account ID: ' + currentAgent.accountId);
-      
-      console.log('\n🔐 Key Information:');
-      console.log('  • Type: ED25519 (Recommended for Hedera)');
-      console.log('  • Format: DER-encoded');
-      console.log('  • Security: High-performance elliptic curve cryptography');
-      
+      console.log('\n🎉 SUCCESS! ED25519 account works for Lynx Balancer Agent registration!');
     } else {
       console.log('\n⚠️  Agent details not immediately available.');
       console.log('📄 Check transaction ID on HashScan for account creation.');
     }
 
-    console.log('\n📝 Next steps for Lynx Balancer Agent:');
+    console.log('\n📝 Next steps:');
     console.log('1. Add the agent environment variables to your .env file');
     console.log('2. Run `npm run hybrid:agent` to test hybrid blockchain + networking');
-    console.log('3. Find other DeFi agents: "Find all agents with defi tag"');
-    console.log('4. Create portfolio tokens and start balancing operations');
-    console.log('5. Coordinate with other agents for advanced DeFi strategies');
-    
-    console.log('\n🦌 Lynx Balancer Agent Features:');
-    console.log('  ⚖️  Automated portfolio rebalancing');
-    console.log('  🤝 Multi-agent DeFi coordination');
-    console.log('  📊 Real-time balance monitoring');
-    console.log('  🎯 Yield optimization strategies');
-    console.log('  🔗 Agent network discovery and communication');
-    console.log('  🔑 ED25519 cryptographic security');
+    console.log('3. Run `npm start` to start the balancer agent');
     
   } catch (error) {
-    console.error('\n❌ Lynx Balancer Agent setup failed with ED25519 account:', error);
-    console.log('\n🔧 Troubleshooting for ED25519 DER Keys:');
-    console.log('1. Ensure your account has sufficient HBAR (≥5 HBAR recommended)');
-    console.log('2. Verify your ED25519 private key is DER-encoded');
-    console.log('3. Check your network setting (testnet/mainnet) matches your account');
-    console.log('4. Ensure OpenAI API key is valid and has credits');
-    console.log('5. ED25519 keys should start with "302a300506032b657004" in DER format');
+    console.error('\n❌ Setup failed with ED25519 account:', error);
+    console.log('\nThis will help determine if there are configuration issues.');
     process.exit(1);
   }
 }
