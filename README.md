@@ -45,10 +45,24 @@ A **TypeScript** **Hybrid** AI agent combining **Hedera Agent Kit v3** with **St
 
 ## 🛠 Installation
 
+### **Local Development**
 ```bash
 git clone <your-repo-url>
 cd lynx-balancer-agent
 npm install
+```
+
+### **VM/Codespace Deployment** 
+For ISP websocket restrictions or clean network environments:
+
+📖 **[VM & Codespace Deployment Guide](docs/VM_DEPLOYMENT.md)**
+
+Quick VM setup:
+```bash
+# GitHub Codespaces (recommended)
+# Create codespace from your repo, then:
+npm install
+npm run build
 ```
 
 ## ⚙️ Configuration
@@ -158,7 +172,8 @@ lynx-balancer-agent/
 ├── scripts/                       # Setup and utility scripts
 │   └── register-agent.ts          # Agent registration script
 ├── docs/                          # Documentation
-│   └── AGENT_REGISTRATION.md      # Agent registration guide
+│   ├── AGENT_REGISTRATION.md      # Agent registration guide
+│   └── VM_DEPLOYMENT.md           # VM & Codespace deployment
 ├── dist/                          # Compiled JavaScript
 ├── env.example                    # Environment template
 ├── tsconfig.json                  # TypeScript configuration
