@@ -1,378 +1,499 @@
-# Lynx Balancer Agent 🦌⚡
+# 🦌⚡ Lynx Balancer Agent
 
-A **TypeScript** **Hybrid** AI agent combining **Hedera Agent Kit v3** with **Standards Agent Plugin** for both blockchain operations AND agent-to-agent networking. This project demonstrates how to create intelligent agents that can perform sophisticated blockchain operations while coordinating with other agents through **HCS-10 standards**.
+Hedera-powered AI agent using HCS and the **V3 Hedera Agent Kit** with LangChain agents for automated treasury balancing through agent-to-agent communication.
 
-[![Hedera](https://img.shields.io/badge/Hedera-Testnet-00D4AA)](https://hedera.com/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)](https://nodejs.org/)
-[![HCS-10](https://img.shields.io/badge/HCS--10-Compliant-purple)](https://hashgraphonline.com)
-[![ED25519](https://img.shields.io/badge/Crypto-ED25519-red)](https://ed25519.cr.yp.to/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+## 🎯 Overview
 
-## 🚀 Hybrid Capabilities
+The Lynx Balancer Agent is designed to work in coordination with a Governance Agent to automatically rebalance tokenized index treasuries. It demonstrates advanced **agent-to-agent communication** using the HCS-10 protocol and executes portfolio rebalancing based on governance parameter updates.
 
-### 🔗 **Blockchain Operations** (via Hedera Agent Kit v3)
-- ✅ **Token Management**: Create, transfer, airdrop HTS tokens
-- ✅ **HBAR Operations**: Transfer, balance queries, account management
-- ✅ **Consensus Service**: Create topics, submit messages, query history
-- ✅ **Real-time Queries**: Account info, token balances, transaction records
+### Key Features
 
-### 🌐 **Agent Networking** (via Standards Agent Plugin)
-- ✅ **Agent Registration**: HCS-10 compliant agent discovery  
-- ✅ **Network Discovery**: Find agents by capabilities, tags, account ID
-- ✅ **P2P Connections**: Secure agent-to-agent communication
-- ✅ **Message Coordination**: Multi-agent workflow orchestration
-- ✅ **Connection Management**: Handle requests, approvals, monitoring
+- ✅ **V3 Hedera Agent Kit**: Modern LangChain-based agent architecture
+- ✅ **HCS-10 Agent Communication**: Secure, connection-based messaging with governance agents
+- ✅ **Automated Rebalancing**: Responds to governance ratio updates with portfolio adjustments
+- ✅ **Multi-Agent Coordination**: Works seamlessly with existing governance agent systems
+- ✅ **Real-time Status Reporting**: Provides progress updates during rebalancing operations
+- ✅ **Security & Access Control**: Built-in permission management and fee barriers
 
-### 🤖 **AI Integration**
-- ✅ **Natural Language Processing**: ChatGPT-4o powered interactions
-- ✅ **Intelligent Automation**: Smart decision making for complex workflows
-- ✅ **Multi-Agent Coordination**: AI-driven collaboration strategies  
-- ✅ **Adaptive Responses**: Context-aware blockchain and networking operations
+## 🚀 Quick Start
 
-### 🔐 **Security & Performance**
-- ✅ **ED25519 Cryptography**: High-performance elliptic curve signatures
-- ✅ **DER Key Encoding**: Standard secure key format  
-- ✅ **Optimized for Hedera**: Native support and lower transaction costs
-- ✅ **Type-Safe Development**: Full TypeScript with strict type checking
+### Prerequisites
 
-## 📋 Prerequisites
+1. **Node.js 20+** installed
+2. **Hedera Testnet Account** with HBAR balance
+3. **OpenAI API Key** for AI agent functionality
+4. **Governance Agent** (separate project) configured for HCS-10 communication
 
-- **Node.js 20+** installed
-- **TypeScript 5.7+** (installed automatically with dev dependencies)
-- **Hedera testnet account** with **ED25519 keys** and HBAR for transactions (≥5 HBAR recommended)
-- **OpenAI API key** for AI functionality
+### Installation
 
-## 🛠 Installation
-
-### **Local Development**
 ```bash
-git clone <your-repo-url>
-cd lynx-balancer-agent
+# Clone and install dependencies
 npm install
-```
 
-### **VM/Codespace Deployment** 
-For ISP websocket restrictions or clean network environments:
-
-📖 **[VM & Codespace Deployment Guide](docs/VM_DEPLOYMENT.md)**
-
-Quick VM setup:
-```bash
-# GitHub Codespaces (recommended)
-# Create codespace from your repo, then:
-npm install
-npm run build
-```
-
-## ⚙️ Configuration
-
-1. **Setup environment variables:**
-```bash
+# Copy and configure environment
 cp env.example .env
+# Edit .env with your credentials
 ```
 
-2. **Configure your `.env` file with ED25519 keys:**
+### Environment Configuration
+
+Configure your `.env` file with the following sections:
+
 ```env
 # Hedera Network Configuration
 HEDERA_NETWORK=testnet
 HEDERA_ACCOUNT_ID=0.0.YOUR_ACCOUNT_ID
-# ED25519 DER-encoded private key (recommended)
-HEDERA_PRIVATE_KEY=302a300506032b657004YOUR_ED25519_KEY_HERE
+HEDERA_PRIVATE_KEY=YOUR_ED25519_DER_PRIVATE_KEY_HERE
 
-# OpenAI Configuration (for AI agent functionality)
+# OpenAI Configuration
 OPENAI_API_KEY=sk-your-openai-api-key-here
+
+# Agent-to-Agent Communication (HCS-10)
+BALANCER_AGENT_ACCOUNT_ID=0.0.YOUR_BALANCER_ACCOUNT
+BALANCER_AGENT_PRIVATE_KEY=your_balancer_private_key_here
+GOVERNANCE_AGENT_ACCOUNT_ID=0.0.YOUR_GOVERNANCE_ACCOUNT
+
+# Agent Registration
+AGENT_NAME=LynxTreasuryBalancer
+AGENT_DESCRIPTION=Automated treasury rebalancing agent for Lynx Index Token contract
+AGENT_CAPABILITIES=DEFI,PORTFOLIO_MANAGEMENT,TREASURY_BALANCING
+AGENT_TAGS=lynx,treasury,rebalancing,automated
+
+# Treasury Configuration
+GOVERNANCE_CONTRACT_ID=0.0.6216949
+CONTRACT_SAUCE_TOKEN=0.0.1183558
+CONTRACT_LYNX_TOKEN=0.0.6200902
+CONTRACT_WBTC_TOKEN=0.0.6212930
+CONTRACT_USDC_TOKEN=0.0.6212931
+CONTRACT_JAM_TOKEN=0.0.6212932
+CONTRACT_HEADSTART_TOKEN=0.0.6212933
+TREASURY_ACCOUNT_ID=0.0.4340026
 ```
 
-### 🔑 Getting Credentials
+## 🤖 Agent-to-Agent Communication
 
-#### **Hedera Credentials (ED25519 Recommended):**
-1. Visit [Hedera Portal](https://portal.hedera.com/)
-2. Create testnet account with **ED25519** key type
-3. Fund with test HBAR (≥5 HBAR recommended)
-4. Get Account ID (`0.0.XXXXXXX`) and **ED25519 DER-encoded** Private Key
-   - ED25519 DER keys start with: `302a300506032b657004`
+### HCS-10 Protocol Setup
 
-#### **OpenAI API Key:**
-1. Visit [OpenAI Platform](https://platform.openai.com/api-keys)
-2. Create API key and add to `.env`
+The Lynx Balancer Agent uses the HCS-10 protocol for secure communication with governance agents:
 
-## 🚀 Quick Start
-
-### **1. Register Your Agent (First Time Setup)**
-```bash
-npm run register-agent
-```
-This script will:
-- ✅ Register your agent in the HCS-10 agent network using **ED25519** security
-- ✅ Set up agent discovery with DEFI and PORTFOLIO_MANAGEMENT capabilities
-- ✅ Create secure communication topics with optimized cryptography
-- ✅ Provide environment variables for your agent identity
-- ✅ Enable other agents to find and connect with you
-
-**Important**: Add the generated agent environment variables to your `.env` file after registration.
-
-📖 **[Detailed Agent Registration Guide](docs/AGENT_REGISTRATION.md)**
-
-### **2. Foundation Demo**
-```bash
-npm run dev
-```
-Shows foundational capabilities and hybrid architecture overview.
-
-### **3. Hybrid Agent (Recommended)**
-```bash
-npm run hybrid:agent
-```
-Complete demonstration of blockchain + agent networking capabilities using **StandardsKit**.
-
-### **4. Basic LangChain Integration**
-```bash
-npm run langchain:tool-calling-agent
-npm run langchain:structured-chat-agent
+#### 1. **Connection-Based Messaging**
+```mermaid
+graph LR
+    A[Governance Agent] -->|1. Connection Request| B[Balancer Inbound Topic]
+    B -->|2. Auto-Approve| C[Connection Topic Created]
+    C -->|3. Established| D[Private Channel]
+    A -.->|4. Messages| D
+    D -.->|5. Responses| A
 ```
 
-## 🎯 Agent Capabilities
+#### 2. **Message Flow**
+When governance parameters change:
 
-### **Individual Agent Operations**
 ```typescript
-// Example: Portfolio management
-await agent.processMessage(
-  "Check my HBAR balance, then create a portfolio tracking token called 'MyPortfolio'"
+// Governance agent sends update
+const update = {
+  type: 'GOVERNANCE_RATIO_UPDATE',
+  updatedRatios: { hbar: 30, wbtc: 15, sauce: 20, usdc: 15, jam: 12, headstart: 8 },
+  previousRatios: { hbar: 25, wbtc: 15, sauce: 20, usdc: 15, jam: 15, headstart: 10 },
+  changedParameter: 'hbar_ratio',
+  changedValue: { old: 25, new: 30 },
+  effectiveTimestamp: '2024-01-15T10:30:00Z',
+  transactionId: '0.0.123456@1641234567.123456789',
+  changeSummary: 'Increased HBAR allocation from 25% to 30%',
+  reason: 'DAO vote #15 - Increase HBAR exposure due to market conditions'
+};
+```
+
+#### 3. **Balancer Response**
+```typescript
+// Balancer agent responds with status
+const status = {
+  type: 'REBALANCE_STATUS',
+  status: 'completed',
+  payload: {
+    completedSwaps: 3,
+    totalSwaps: 3,
+    progressPercentage: 100,
+    totalValueRebalanced: 3250.25,
+    totalSlippageIncurred: 0.42,
+    totalFeesSpent: 0.18,
+    currentBalances: { /* updated balances */ }
+  }
+};
+```
+
+## 🛠️ Usage
+
+### ⚠️ **IMPORTANT: Correct Workflow for Agent-to-Agent Communication**
+
+#### **Step 0: Quick Connection Test (Recommended)**
+```bash
+# Test connection setup with 2-minute window:
+npm run test:quick
+```
+This starts the balancer agent for 2 minutes to test if connections work, then stops automatically.
+
+**Alternative: Basic Setup Test**
+```bash
+# Test basic agent functionality with minimal API usage:
+npm run test:connection
+```
+
+#### **Step 1: Start the Persistent Balancer Agent (This Project)**
+```bash
+# FIRST: Start the persistent balancer agent 
+npm run balancer:agent
+```
+This starts the balancer agent with proper rate limit handling and keeps it running to monitor for connections.
+
+#### **Step 2: Connect from Governance Agent (Your Other Project)**
+```bash
+# SECOND: In your governance project, run:
+npm run demo:hcs10 demo
+```
+This will connect to the running balancer agent and test communication.
+
+**⚠️ Rate Limit Management:** The agent now includes exponential backoff for OpenAI 429 errors and reduced API call frequency to prevent rate limit issues.
+
+### Demo Mode (Testing Only - Not for Real Connections)
+```bash
+# Run communication setup demo (does not maintain persistent connections)
+npm run demo:hcs10 demo
+
+# Check agent configuration
+npm run demo:hcs10 connections
+
+# View message format examples
+npm run demo:hcs10 test-message "Hello from balancer!"
+```
+
+**Note:** The demo commands are for testing setup only. For real agent-to-agent communication, you MUST use the persistent agent (`npm run balancer:agent`).
+
+### Integration with Governance Agent
+
+#### From Your Governance Agent Project:
+
+1. **Establish Connection**
+```typescript
+// In your governance agent
+await governanceAgent.processMessage(`
+  Initiate connection to account ${BALANCER_AGENT_ACCOUNT_ID}
+`);
+```
+
+2. **Send Governance Updates**
+```typescript
+// When governance parameters change
+const ratioUpdate = {
+  type: 'GOVERNANCE_RATIO_UPDATE',
+  updatedRatios: newRatios,
+  previousRatios: oldRatios,
+  changedParameter: 'parameter_name',
+  changedValue: { old: oldValue, new: newValue },
+  effectiveTimestamp: new Date().toISOString(),
+  transactionId: transactionId,
+  changeSummary: 'Human readable summary',
+  reason: 'Reason for change'
+};
+
+await governanceAgent.processMessage(`
+  Send message to connection ${BALANCER_AGENT_ACCOUNT_ID}: ${JSON.stringify(ratioUpdate)}
+`);
+```
+
+3. **Monitor Balancer Responses**
+```typescript
+// Listen for status updates from balancer
+await governanceAgent.processMessage(`
+  Check for new messages from connection ${BALANCER_AGENT_ACCOUNT_ID}
+`);
+```
+
+## 🔧 Development
+
+### Available Scripts
+
+```bash
+# Core functionality
+npm run dev                    # Development mode
+npm run build                  # Build TypeScript
+npm run start                  # Production mode
+
+# Agent operations
+npm run balancer:agent         # Start persistent balancer agent (V3)
+npm run test:v3-setup         # Test V3 Hedera Agent Kit setup
+npm run test:quick             # Quick 2-minute connection test (recommended)
+npm run test:connection        # Test basic setup with minimal API usage
+npm run demo:hcs10 demo       # Full V3 demo with LangChain agents
+npm run demo:hcs10 connections # Check connections
+npm run register-agent        # Register agent (if needed)
+
+# Examples and testing
+npm run v3:hcs10-agent        # V3 HCS-10 agent example
+npm run hybrid:agent          # Hybrid agent example
+npm run langchain:tool-calling-agent  # LangChain examples
+```
+
+### Message Types
+
+#### Governance Ratio Update
+```typescript
+interface GovernanceRatioUpdate {
+  type: 'GOVERNANCE_RATIO_UPDATE';
+  updatedRatios: Record<string, number>;     // New target allocations
+  previousRatios: Record<string, number>;    // Previous allocations
+  changedParameter: string;                  // Which parameter changed
+  changedValue: { old: number; new: number }; // Specific change
+  effectiveTimestamp: string;                // When change takes effect
+  transactionId: string;                     // Hedera transaction ID
+  changeSummary: string;                     // Human-readable summary
+  reason: string;                           // Why the change occurred
+}
+```
+
+#### Rebalance Status Response
+```typescript
+interface RebalanceStatusMessage {
+  type: 'REBALANCE_STATUS';
+  version: '1.0';
+  timestamp: number;
+  originalRequestId: string;
+  status: 'started' | 'in_progress' | 'completed' | 'failed' | 'paused';
+  payload: {
+    completedSwaps: number;
+    totalSwaps: number;
+    progressPercentage: number;
+    totalValueRebalanced: number;    // USD value
+    totalSlippageIncurred: number;   // Percentage
+    totalFeesSpent: number;          // HBAR
+    currentBalances?: Record<string, number>;
+    error?: {
+      code: string;
+      message: string;
+      failedSwap?: string;
+      recoveryAction?: string;
+    };
+  };
+}
+```
+
+## 🔐 Security & Permissions
+
+### Connection Security
+- **Explicit Approval Required**: All connections must be approved by the balancer agent
+- **Account-Based Authentication**: All messages include verified sender identification
+- **Private Channels**: Each connection gets its own dedicated HCS topic
+
+### Access Control
+```typescript
+// Auto-approve specific governance agents
+const connectionMonitoringPrompt = `
+  Start monitoring for connection requests. 
+  Automatically accept connections from account ${GOVERNANCE_AGENT_ACCOUNT_ID}.
+  Do not charge any fees for connections from the governance agent.
+`;
+```
+
+### Fee-Based Access Control (Optional)
+```typescript
+// Configure fees for premium access
+const feeConfig = {
+  hbarFee: 0.05,  // 0.05 HBAR per message
+  exemptAccountIds: [GOVERNANCE_AGENT_ACCOUNT_ID]  // Exempt trusted agents
+};
+```
+
+## 📊 Monitoring & Debugging
+
+### Connection Status
+```bash
+# Check active connections
+npm run demo:hcs10 connections
+
+# Test connectivity
+npm run demo:hcs10 test-message "Connectivity test"
+```
+
+### Agent Logs
+The agent provides detailed logging for:
+- Connection establishment and approval
+- Message parsing and validation
+- Rebalancing progress and status
+- Error handling and recovery
+
+### Common Issues & Troubleshooting
+
+**❌ "Connection not established within timeout"**
+```bash
+✅ Solution: 
+1. FIRST: Start balancer agent: npm run balancer:agent
+2. Wait for "BALANCER AGENT IS NOW READY FOR CONNECTIONS" message
+3. THEN: Run governance agent from your other project
+4. Check that both agents show the correct account IDs
+```
+
+**❌ "Cannot monitor for connections. No agent is currently active."**
+```bash
+✅ Solution: 
+1. The agent needs to be properly registered in HCS-11 registry
+2. Run the persistent agent (npm run balancer:agent), not the demo
+3. Make sure BALANCER_AGENT_ACCOUNT_ID is set correctly
+```
+
+**❌ "Agent not initialized"**
+```bash
+✅ Solution: Don't create multiple agent instances
+Use the persistent agent which maintains one instance
+```
+
+**❌ OpenAI Rate Limits**
+```bash
+✅ Solution: 
+1. Wait for rate limits to reset (usually 1-2 minutes)
+2. Use the persistent agent to avoid creating multiple instances
+3. Consider upgrading your OpenAI plan for higher rate limits
+```
+
+## 🚀 Deployment
+
+### Production Deployment
+
+1. **Configure Production Environment**
+```bash
+# Use mainnet for production
+HEDERA_NETWORK=mainnet
+BALANCER_AGENT_ACCOUNT_ID=0.0.PRODUCTION_ACCOUNT
+BALANCER_AGENT_PRIVATE_KEY=production_private_key
+```
+
+2. **Start Persistent Agent**
+```bash
+npm run build
+npm start
+
+# Or directly
+npm run balancer:agent
+```
+
+3. **Monitor Agent Health**
+```bash
+# Check connections periodically
+npm run demo:hcs10 connections
+```
+
+### Docker Deployment
+```dockerfile
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build
+CMD ["npm", "run", "balancer:agent"]
+```
+
+## 🤝 Integration Examples
+
+### Governance Agent Integration
+
+See the [HCS-10 Agent Communication Guide](docs/HCS-10_Agent_Communication.md) for detailed integration examples with your governance agent.
+
+### Custom Message Handlers
+
+```typescript
+// Extend the balancer agent for custom message types
+class CustomBalancerAgent extends LynxBalancerAgent {
+  protected async handleIncomingMessage(messageContent: string): Promise<void> {
+    // Add custom message handling logic
+    if (messageContent.includes('CUSTOM_MESSAGE_TYPE')) {
+      await this.handleCustomMessage(messageContent);
+      return;
+    }
+    
+    // Fall back to default handling
+    await super.handleIncomingMessage(messageContent);
+  }
+  
+  private async handleCustomMessage(message: string): Promise<void> {
+    // Your custom logic here
+  }
+}
+```
+
+### V3 Hedera Agent Kit Integration
+
+The new V3 approach uses LangChain agents with the Hedera Agent Kit:
+
+```typescript
+// Initialize V3 Hedera Agent Kit
+const client = Client.forTestnet().setOperator(
+  process.env.ACCOUNT_ID,
+  PrivateKey.fromStringDer(process.env.PRIVATE_KEY),
 );
-```
 
-### **Multi-Agent Networking**
-```typescript
-// Example: Agent discovery and coordination
-await agent.processMessage(
-  'Register me as a DeFi agent with PORTFOLIO_MANAGEMENT capability, then find other trading agents'
-);
-```
-
-### **Hybrid Workflows**
-```typescript
-// Example: Coordinated DeFi strategy
-await agent.processMessage(
-  'Create a governance token, register as a DAO agent, find other governance agents, and propose a coordination strategy'
-);
-```
-
-## 🏗 Project Architecture
-
-```
-lynx-balancer-agent/
-├── src/                           # TypeScript source code
-│   ├── index.ts                   # Foundation demo & hybrid overview
-│   └── examples/                  # Advanced usage examples
-│       ├── hybrid-agent.ts        # StandardsKit hybrid demo
-│       ├── manual-hybrid-agent.ts # Future manual integration
-│       ├── tool-calling-agent.ts  # LangChain tool calling
-│       └── structured-chat-agent.ts # Conversational interface
-├── scripts/                       # Setup and utility scripts
-│   └── register-agent.ts          # Agent registration script
-├── docs/                          # Documentation
-│   ├── AGENT_REGISTRATION.md      # Agent registration guide
-│   └── VM_DEPLOYMENT.md           # VM & Codespace deployment
-├── dist/                          # Compiled JavaScript
-├── env.example                    # Environment template
-├── tsconfig.json                  # TypeScript configuration
-└── package.json                   # Dependencies and scripts
-```
-
-## 🔧 Development Scripts
-
-| Script | Description |
-|--------|-------------|
-| `npm run register-agent` | **Register agent in HCS-10 network with ED25519** |
-| `npm run build` | Compile TypeScript to JavaScript |
-| `npm run dev` | Foundation demo with hybrid overview |
-| `npm start` | Build and run main application |
-| `npm run hybrid:agent` | **Hybrid agent demo (StandardsKit)** |
-| `npm run hybrid:manual` | Manual integration info |
-| `npm run langchain:tool-calling-agent` | LangChain tool calling |
-| `npm run langchain:structured-chat-agent` | Conversational agent |
-| `npm run type-check` | Type check without building |
-| `npm run lint` | Lint TypeScript files |
-
-## 🌟 Use Cases & Examples
-
-### **🏦 DeFi Portfolio Management**
-```bash
-# 1. First register your agent with ED25519 security
-npm run register-agent
-
-# 2. Test hybrid capabilities  
-npm run hybrid:agent
-```
-- Automated portfolio rebalancing
-- Multi-agent liquidity strategies
-- Coordinated yield farming
-
-### **🤝 Multi-Agent Coordination**
-```bash
-# Discover and connect with other agents
-npm run hybrid:agent
-```
-- Agent discovery by capabilities
-- Secure P2P communication with ED25519
-- Collaborative workflows
-
-### **🎮 Gaming & NFTs** 
-```bash
-# Create game tokens and agent NPCs
-npm run hybrid:agent
-```
-- Token-based game economies
-- AI-powered NPCs as agents
-- Decentralized gaming coordination
-
-### **🏭 Supply Chain**
-```bash
-# Verification and tracking agents
-npm run hybrid:agent
-```
-- Multi-agent verification systems
-- Supply chain coordination
-- Automated compliance reporting
-
-## 🧪 Advanced Integration
-
-### **StandardsKit Approach (Recommended)**
-```typescript
-import { StandardsKit } from '@hashgraphonline/standards-agent-plugin';
-
-const lynxAgent = new StandardsKit({
-  accountId: process.env.HEDERA_ACCOUNT_ID!,
-  privateKey: process.env.HEDERA_PRIVATE_KEY!, // ED25519 DER format
-  network: 'testnet',
-  openAIApiKey: process.env.OPENAI_API_KEY!,
-  verbose: true
+const hederaAgentToolkit = new HederaLangchainToolkit({
+  client,
+  configuration: {
+    tools: [] // Load all available tools
+  },
 });
 
-await lynxAgent.initialize();
+// Initialize OpenAI LLM
+const llm = new ChatOpenAI({
+  model: 'gpt-4o-mini',
+});
+
+// Create the agent prompt template
+const prompt = ChatPromptTemplate.fromMessages([
+  ['system', 'You are a treasury balancer agent...'],
+  ['placeholder', '{chat_history}'],
+  ['human', '{input}'],
+  ['placeholder', '{agent_scratchpad}'],
+]);
+
+// Fetch tools from toolkit
+const tools = hederaAgentToolkit.getTools();
+
+// Create the underlying agent
+const agent = createToolCallingAgent({
+  llm,
+  tools,
+  prompt,
+});
+
+// Wrap everything in an executor that will maintain memory
+const agentExecutor = new AgentExecutor({
+  agent,
+  tools,
+});
 ```
 
-### **LangChain Integration**
-```typescript
-import { HederaLangchainToolkit } from 'hedera-agent-kit';
-import { createToolCallingAgent } from 'langchain/agents';
+## 📚 Documentation
 
-const hederaKit = new HederaLangchainToolkit({ client, configuration });
-const tools = hederaKit.getTools();
-const agent = createToolCallingAgent({ llm, tools, prompt });
-```
-
-## 🎯 Agent Registration Details
-
-When you run `npm run register-agent`, your agent will be registered with:
-
-### **🏷️ Capabilities**
-- `DEFI`: Decentralized finance operations
-- `PORTFOLIO_MANAGEMENT`: Portfolio balancing and optimization
-
-### **🔖 Tags** 
-- `defi`: DeFi-related services
-- `balancing`: Portfolio balancing capabilities
-- `automated`: Automated trading and operations  
-- `trading`: Trading strategy coordination
-
-### **🔑 Cryptographic Security**
-- **ED25519 signatures** for high-performance security
-- **DER encoding** for standard key format compatibility
-- **Optimized for Hedera** with lower transaction costs
-
-### **🔍 Discovery**
-Other agents can find your Lynx Balancer Agent by searching for:
-```typescript
-// Find by capability
-"Find agents with DEFI capability"
-
-// Find by tags  
-"Find agents with balancing tag"
-
-// Find by account
-"Find agent 0.0.YOUR_AGENT_ACCOUNT"
-```
-
-## 🛡 Security & Best Practices
-
-- ✅ **Environment Variables**: Never commit private keys
-- ✅ **ED25519 Cryptography**: Industry-leading elliptic curve signatures
-- ✅ **DER Key Encoding**: Secure standardized key format
-- ✅ **Type Safety**: Strict TypeScript configuration
-- ✅ **Error Handling**: Comprehensive error management
-- ✅ **Rate Limiting**: Built-in transaction throttling  
-- ✅ **HCS-10 Compliance**: Standardized agent communication
-- ✅ **Agent Registration**: Secure agent identity management
-
-## 🔮 Roadmap & Future Features
-
-### **Immediate Goals**
-- [ ] Advanced portfolio balancing algorithms
-- [ ] More agent networking examples
-- [ ] Integration with external data feeds
-- [ ] Enhanced error recovery mechanisms
-
-### **Future Enhancements**
-- [ ] Smart contract integration
-- [ ] Advanced multi-agent consensus algorithms  
-- [ ] Machine learning-based trading strategies
-- [ ] Cross-chain agent coordination
-- [ ] Web interface for agent management
+- [Treasury Balancer Implementation Plan](docs/TREASURY_BALANCER_IMPLEMENTATION_PLAN.md)
+- [HCS-10 Agent Communication Setup](docs/HCS-10_Agent_Communication.md)
+- [Agent-to-Agent Messaging Guide](docs/AGENT_TO_AGENT_MESSAGING.md)
+- [VM Deployment Guide](docs/VM_DEPLOYMENT.md)
 
 ## 🤝 Contributing
 
-We welcome contributions! Please:
-
 1. Fork the repository
-2. Create feature branch (`git checkout -b feature/AmazingFeature`)
-3. Write TypeScript with proper types
-4. Add tests if applicable
-5. Commit changes (`git commit -m 'Add AmazingFeature'`)
-6. Push to branch (`git push origin feature/AmazingFeature`)
-7. Open Pull Request
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## 📄 License
 
-Apache 2.0 - See [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENSE) file for details.
 
-## 🔗 Resources & Links
+## 🙋‍♂️ Support
 
-### **Core Technologies**
-- [Hedera Agent Kit NPM](https://www.npmjs.com/package/hedera-agent-kit)
-- [Standards Agent Plugin](https://github.com/hashgraph-online/standards-agent-plugin)
-- [Hedera Documentation](https://docs.hedera.com/)
-- [TypeScript Documentation](https://www.typescriptlang.org/)
-
-### **Agent Networking**
-- [HCS-10 Standards](https://hcs-improvement-proposals.pages.dev/docs/standards)
-- [Hashgraph Online](https://hashgraphonline.com)
-- [OpenConvAI Documentation](https://hashgraphonline.com/docs/libraries/standards-agent-plugin/)
-
-### **Cryptography & Security**
-- [ED25519 Cryptography](https://ed25519.cr.yp.to/)
-- [Hedera Keys and Signatures](https://docs.hedera.com/hedera/core-concepts/keys-and-signatures)
-- [DER Encoding Standard](https://wiki.openssl.org/index.php/DER)
-
-### **AI & LangChain**
-- [LangChain Documentation](https://js.langchain.com/)
-- [OpenAI API](https://platform.openai.com/)
-
-### **Community**
-- [Hedera Discord](https://discord.gg/hedera)
-- [GitHub Issues](../../issues)
-
-## 🎉 Acknowledgments
-
-- **Hedera Team** for the excellent Agent Kit v3
-- **Hashgraph Online** for pioneering HCS-10 agent standards
-- **LangChain Team** for powerful AI agent framework
-- **OpenAI** for GPT-4 integration capabilities
-- **ED25519 Community** for high-performance cryptography
+For questions and support:
+- Review the documentation in the `docs/` directory
+- Check the examples in `src/examples/`
+- Run the demo: `npm run demo:hcs10 demo`
 
 ---
 
-🦌 **Built with ❤️ using Hedera Agent Kit v3, Standards Agent Plugin, ED25519 cryptography, and TypeScript** ⚡
-
-*Ready to build the future of multi-agent blockchain systems with cutting-edge security!* 
+**Built with ❤️ using Hedera Hashgraph, HCS-10 Protocol, and the V3 Hedera Agent Kit** 
