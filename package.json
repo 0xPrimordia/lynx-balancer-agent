@@ -12,22 +12,8 @@
     "watch": "tsc --watch",
     "clean": "rm -rf dist",
     "register-agent": "tsx scripts/register-agent.ts",
-    "balancer:agent": "tsx src/balancer-agent.ts",
-    "governance:checker": "tsx src/governance-balance-checker.ts",
-    "quick:balance": "tsx src/quick-balance-check.ts",
-    "tool:balance": "tsx src/tool-calling-balance-check.ts",
-    "demo:hcs10": "tsx src/demo-hcs10.ts",
-    "test:connection": "tsx src/simple-connection-test.ts",
-    "test:quick": "tsx src/quick-connection-test.ts",
-    "test:v3-setup": "tsx src/test-v3-setup.ts",
-
-
-
-    "langchain:tool-calling-agent": "tsx src/examples/tool-calling-agent.ts",
-    "langchain:structured-chat-agent": "tsx src/examples/structured-chat-agent.ts",
-    "v3:hcs10-agent": "tsx src/examples/v3-hcs10-agent.ts",
-    "hybrid:agent": "tsx src/examples/hybrid-agent.ts",
-    "hybrid:manual": "tsx src/examples/manual-hybrid-agent.ts",
+    "test:balancing": "tsx src/test-balancing.ts",
+    "test:alert": "tsx src/send-test-alert.ts",
     "type-check": "tsc --noEmit",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix"
@@ -50,7 +36,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@hashgraph/sdk": "^2.54.0",
-    "@hashgraphonline/standards-agent-plugin": "^0.0.5",
+    "@hashgraphonline/conversational-agent": "^0.1.1",
     "@hashgraphonline/standards-sdk": "^0.0.155",
     "@langchain/core": "^0.3.24",
     "@langchain/openai": "^0.3.14",

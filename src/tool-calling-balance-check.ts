@@ -9,6 +9,9 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { AgentExecutor, createToolCallingAgent } from 'langchain/agents';
 import { Client, PrivateKey } from '@hashgraph/sdk';
 import { HederaLangchainToolkit, AgentMode } from 'hedera-agent-kit';
+import { StructuredTool } from '@langchain/core/tools';
+// TODO: Re-enable when contract transfer tool is recreated as proper structured tool
+// import { contractTransferParameters, contractTransferExecute } from './tools/contract-transfer-tool.js';
 
 // Load environment variables
 config();
@@ -33,6 +36,27 @@ interface EnvironmentConfig {
   GOVERNANCE_CONTRACT_ID?: string;
   TREASURY_ACCOUNT_ID?: string;
 }
+
+/**
+ * Custom Tool for Contract Transfers
+ * TODO: Re-enable when contract transfer tool is recreated as proper structured tool
+ */
+/*
+class ContractTransferTool extends StructuredTool {
+  name = 'contract_transfer';
+  description = 'Transfer tokens or HBAR from a contract by calling a contract function';
+  schema = contractTransferParameters({});
+
+  constructor(private client: Client) {
+    super();
+  }
+
+  async _call(input: any): Promise<string> {
+    const result = await contractTransferExecute(this.client, {}, input);
+    return JSON.stringify(result, null, 2);
+  }
+}
+*/
 
 /**
  * Tool Calling Balance Checker
@@ -124,17 +148,23 @@ class ToolCallingBalanceChecker {
       // Get Hedera tools
       const hederaTools = this.hederaAgentToolkit.getTools();
 
+      // TODO: Re-enable when contract transfer tool is recreated
+      // Add our custom contract transfer tool
+      // const contractTransferToolInstance = new ContractTransferTool(this.client);
+      // const allTools = [...hederaTools, contractTransferToolInstance];
+      const allTools = hederaTools;
+
       // Create the tool-calling agent (using same approach as working example)
       const agent = await createToolCallingAgent({
         llm,
-        tools: hederaTools,
+        tools: allTools,
         prompt
       });
       
       // Create the agent executor (using same config as working example)
       this.agentExecutor = new AgentExecutor({
         agent,
-        tools: hederaTools,
+        tools: allTools,
         verbose: true,
         maxIterations: 10
       });
@@ -247,6 +277,63 @@ class ToolCallingBalanceChecker {
       throw error;
     }
   }
+
+  /**
+   * Transfer HBAR from contract to operator account using the contract transfer tool
+   */
+  async transferTokensFromContract(amount: string): Promise<void> {
+    console.log("\n💰 Transfer HBAR from Contract to Operator");
+    console.log("===========================================");
+
+    if (!this.agentExecutor) {
+      throw new Error("Not initialized. Call initialize() first.");
+    }
+
+    const contractId = this.env.GOVERNANCE_CONTRACT_ID;
+    if (!contractId) {
+      console.error("❌ GOVERNANCE_CONTRACT_ID not configured");
+      return;
+    }
+
+    // Accept both HBAR and tinybars for user convenience
+    let tinybarAmount: string;
+    if (amount.includes(".")) {
+      // Assume HBAR, convert to tinybars
+      tinybarAmount = (parseFloat(amount) * 1e8).toFixed(0);
+    } else {
+      tinybarAmount = amount;
+    }
+
+    try {
+      // First, use agent to check current balances
+      console.log("🔍 Checking current balances before transfer...");
+      await this.agentExecutor.invoke({
+        input: `Check the current HBAR balance of contract ${contractId} and account ${this.env.HEDERA_ACCOUNT_ID}`
+      });
+
+      // Use the contract transfer tool to execute the contract call
+      console.log(`🔧 Calling emergencyWithdrawHbar on contract ${contractId}`);
+      console.log(`💰 Amount: ${tinybarAmount} tinybars`);
+      
+      const response = await this.agentExecutor.invoke({
+        input: `Use the contract_transfer tool to call the emergencyWithdrawHbar function on contract ${contractId} with amount ${tinybarAmount} and gas 75000`
+      });
+
+      console.log("✅ Contract Call Results:");
+      console.log("========================");
+      console.log(response.output);
+
+      // Use agent to verify the transfer
+      console.log("\n🔍 Verifying transfer results...");
+      await this.agentExecutor.invoke({
+        input: `Check the current HBAR balance of contract ${contractId} and account ${this.env.HEDERA_ACCOUNT_ID} after the transfer`
+      });
+
+    } catch (error) {
+      console.error("❌ Failed to transfer HBAR from contract:", error);
+      throw error;
+    }
+  }
 }
 
 /**
@@ -282,15 +369,21 @@ async function main(): Promise<void> {
         }
         await checker.transferTokensToContract(tokenId, tokenAmount);
         break;
+      case 'withdraw-hbar':
+        const withdrawAmount = args[1] || '0.1';
+        await checker.transferTokensFromContract(withdrawAmount);
+        break;
       default:
         console.log("📋 Available commands:");
         console.log("  check           - Check current balances");
         console.log("  transfer-hbar   - Transfer HBAR to governance contract");
         console.log("  transfer-token  - Transfer tokens to governance contract");
+        console.log("  withdraw-hbar   - Transfer HBAR from contract to operator using contract function");
         console.log("\n💡 Examples:");
         console.log("   npm run tool:balance check");
         console.log("   npm run tool:balance transfer-hbar 0.5");
         console.log("   npm run tool:balance transfer-token 0.0.6212930 100");
+        console.log("   npm run tool:balance withdraw-hbar 1");
         break;
     }
 

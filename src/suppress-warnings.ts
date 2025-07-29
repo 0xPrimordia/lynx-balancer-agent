@@ -16,7 +16,8 @@ console.warn = (...args: any[]) => {
   }
   
   // Suppress invalid topic ID format errors (these are internal parsing issues)
-  if (message.includes('Invalid connection topic ID format')) {
+  if (message.includes('Invalid connection topic ID format') ||
+      message.includes('Invalid connection topic ID format:')) {
     return;
   }
   
@@ -34,7 +35,8 @@ console.error = (...args: any[]) => {
   const message = args.join(' ');
   
   // Suppress invalid topic ID format errors
-  if (message.includes('Invalid connection topic ID format')) {
+  if (message.includes('Invalid connection topic ID format') ||
+      message.includes('Invalid connection topic ID format:')) {
     return;
   }
   
