@@ -8,6 +8,7 @@ import { Client } from '@hashgraph/sdk';
 import { HederaLangchainToolkit } from 'hedera-agent-kit';
 import { TokenTransferTool } from '../tools/token-transfer-tool.js';
 import { HbarWithdrawalTool } from '../tools/hbar-withdrawal-tool.js';
+import { TokenWithdrawalTool } from '../tools/token-withdrawal-tool.js';
 import { TopicQueryTool } from '../tools/topic-query-tool.js';
 import { ContractRatioTool, TokenSupplyTool } from '../tools/contract-ratio-tool.js';
 
@@ -133,10 +134,10 @@ export class LynxBalancerAgent {
       
       // Query the Hedera network for Lynx token total supply using the dedicated tool
       const response = await this.agentExecutor.invoke({
-        input: `Use the token_supply_query tool to get the total supply of Lynx tokens with token ID ${this.env.CONTRACT_LYNX_TOKEN}. Please respond with ONLY the total supply number.`
+        input: `Use the token_supply_query tool to get the total supply of Lynx tokens with token ID ${this.env.CONTRACT_LYNX_TOKEN}. Return ONLY the humanReadableSupply value from the JSON response.`
       });
       
-      // Parse the response to extract the total supply
+      // Parse the response to extract the human-readable total supply
       const supplyMatch = response.output.match(/(\d+(?:,\d+)*(?:\.\d+)?)/);
       if (supplyMatch) {
         const totalSupply = parseFloat(supplyMatch[1].replace(/,/g, ''));
@@ -274,7 +275,7 @@ HEADSTART: 3
               if (tokenName === 'HBAR') {
                 await this.executeHbarWithdrawal(Math.abs(difference));
               } else {
-                console.log(`   ⚠️  Token selling not supported yet for ${tokenName}`);
+                await this.executeTokenWithdrawal(tokenConfig.tokenId, Math.abs(difference));
               }
               console.log(`   ✅ Sell operation completed for ${tokenName}`);
             } catch (error) {
@@ -438,10 +439,11 @@ HEADSTART: 3
       const hederaTools = this.hederaAgentToolkit.getTools();
       const tokenTransferTool = new TokenTransferTool(this.client);
       const hbarWithdrawalTool = new HbarWithdrawalTool(this.client);
+      const tokenWithdrawalTool = new TokenWithdrawalTool(this.client);
       const topicQueryTool = new TopicQueryTool(this.client, this.env.BALANCER_ALERT_TOPIC_ID || '0.0.0');
       const contractRatioTool = new ContractRatioTool(this.client);
       const tokenSupplyTool = new TokenSupplyTool(this.client);
-      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, topicQueryTool, contractRatioTool, tokenSupplyTool];
+      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, tokenWithdrawalTool, topicQueryTool, contractRatioTool, tokenSupplyTool];
 
       // Create the tool-calling agent (following tool-calling-balance-check pattern)
       const agent = await createToolCallingAgent({
@@ -899,7 +901,7 @@ HEADSTART: 3
             if (changedTokenName === 'HBAR') {
               await this.executeHbarWithdrawal(Math.abs(amountToTransfer));
             } else {
-              console.log(`⚠️  Token selling not supported yet for ${changedTokenName}`);
+              await this.executeTokenWithdrawal(tokenConfig.tokenId, Math.abs(amountToTransfer));
             }
           }
           
@@ -973,7 +975,7 @@ HEADSTART: 3
           if (token === 'HBAR') {
             await this.executeHbarWithdrawal(Math.abs(amountToTransfer));
           } else {
-            console.log(`⚠️  Token selling not supported yet for ${token}`);
+            await this.executeTokenWithdrawal(tokenConfig.tokenId, Math.abs(amountToTransfer));
           }
         }
         
@@ -1245,6 +1247,31 @@ TOKEN: 0.0.6200902 | BALANCE: 0 | DECIMALS: 8
       return `Successfully withdrew ${amount} HBAR from governance contract`;
     } catch (error) {
       console.error(`❌ HBAR withdrawal failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute token withdrawal from the governance contract
+   */
+  private async executeTokenWithdrawal(tokenId: string, amount: number): Promise<string> {
+    if (!this.agentExecutor) throw new Error("Agent executor not initialized");
+
+    const contractId = this.env.GOVERNANCE_CONTRACT_ID;
+    const tokenConfig = this.getTokenConfig(tokenId);
+    const amountInRawUnits = Math.floor(amount * Math.pow(10, tokenConfig?.decimals || 8));
+
+    console.log(`🪙 Withdrawing ${amount} units of token ${tokenId} (${amountInRawUnits} raw units) from contract ${contractId}`);
+
+    try {
+      const response = await this.agentExecutor.invoke({
+        input: `Use the token_withdrawal tool to withdraw ${amountInRawUnits} raw units of token ${tokenId} from contract ${contractId} with reason "Treasury rebalancing". This calls the adminWithdrawToken function.`
+      });
+      
+      console.log(`✅ Token withdrawal response: ${response.output}`);
+      return `Successfully withdrew ${amount} units of token ${tokenId} from governance contract`;
+    } catch (error) {
+      console.error(`❌ Token withdrawal failed:`, error);
       throw error;
     }
   }
