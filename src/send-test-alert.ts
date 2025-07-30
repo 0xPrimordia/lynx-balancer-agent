@@ -19,14 +19,15 @@ config();
 interface BalanceAlertMessage {
   p: 'hcs-10';                    // Protocol identifier
   op: 'balance_alert';            // Operation type
-  operator_id: string;            // Format: "{inboundTopicId}@{accountId}"
+  operator_id: string;            // Format: "{governance_topic}@{agent_account}"
+  m: string;                      // Human-readable message
+  
+  // Alert Data
   data: {
     type: 'GOVERNANCE_RATIO_UPDATE';
-    alertLevel: 'NORMAL' | 'HIGH';  // Based on change magnitude (>5% = HIGH)
-    updatedRatios: Record<string, number>;  // New target ratios by token name
-    previousRatios: Record<string, number>; // Old ratios for comparison
-    tokenIds: Record<string, string>;       // Token ID mapping (name -> ID)
-    changedParameter: string;      // e.g., "treasury.weights.HBAR"
+    alertLevel: 'HIGH' | 'NORMAL';
+    weights: Record<string, number>;  // Weight multipliers by token name
+    changedToken: string;         // Name of the token that changed
     changedValue: {
       old: number;
       new: number;
@@ -34,11 +35,9 @@ interface BalanceAlertMessage {
     changeMagnitude: number;       // Absolute difference between old/new
     effectiveTimestamp: string;    // ISO timestamp
     transactionId: string;         // Contract update transaction ID
-    changeSummary: string;         // Human-readable summary
     reason: string;                // "Governance vote executed - contract ratios updated"
     requiresImmediateRebalance: boolean;  // true if change > 5%
   };
-  m: string;                      // Human-readable message
 }
 
 /**
@@ -157,7 +156,7 @@ class SimpleAlertSender {
   }
 
   /**
-   * Send a test alert to the balancer agent topic using governance agent schema
+   * Send a test balance alert to the balancer agent topic using HCS-10 protocol
    */
   async sendAlert(alertType: string): Promise<void> {
     if (!this.agentExecutor || !this.topicId) {
@@ -168,105 +167,90 @@ class SimpleAlertSender {
     const operatorId = `${env.BALANCER_INBOUND_TOPIC_ID || '0.0.123456'}@${env.HEDERA_ACCOUNT_ID}`;
 
     const alerts: Record<string, BalanceAlertMessage> = {
-      hbar: {
-        p: 'hcs-10',
-        op: 'balance_alert',
-        operator_id: operatorId,
-        data: {
-          type: 'GOVERNANCE_RATIO_UPDATE',
-          alertLevel: 'HIGH',
-          updatedRatios: {
-            HBAR: 40,
-            USDC: 20
-          },
-          previousRatios: {
-            HBAR: 50,
-            USDC: 15
-          },
-          tokenIds: {
-            HBAR: 'HBAR', // HBAR doesn't have a token ID
-            USDC: '0.0.6212931'
-          },
-          changedParameter: 'treasury.weights.HBAR',
-          changedValue: {
-            old: 50,
-            new: 40
-          },
-          changeMagnitude: 10,
-          effectiveTimestamp: new Date().toISOString(),
-          transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
-          changeSummary: 'HBAR: 50% ↓ 40% (-10%), USDC: 15% ↑ 20% (+5%)',
-          reason: 'Governance vote executed - contract ratios updated',
-          requiresImmediateRebalance: true
+              hbar: {
+          p: 'hcs-10',
+          op: 'balance_alert',
+          operator_id: operatorId,
+          m: 'Balance Alert: HBAR weight changed from 50 to 40 (10 weight change)',
+          data: {
+            type: 'GOVERNANCE_RATIO_UPDATE',
+            alertLevel: 'HIGH',
+            weights: {
+              HBAR: 40,
+              WBTC: 4,
+              SAUCE: 30,
+              USDC: 30,
+              JAM: 30,
+              HEADSTART: 20
+            },
+            changedToken: 'HBAR',
+            changedValue: {
+              old: 50,
+              new: 40
+            },
+            changeMagnitude: 10,
+            effectiveTimestamp: new Date().toISOString(),
+            transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
+            reason: 'Governance vote executed - contract ratios updated',
+            requiresImmediateRebalance: true
+          }
         },
-        m: 'Balance Alert: treasury.weights.HBAR changed from 50% to 40% (10% change)'
-      },
-      sauce: {
-        p: 'hcs-10',
-        op: 'balance_alert',
-        operator_id: operatorId,
-        data: {
-          type: 'GOVERNANCE_RATIO_UPDATE',
-          alertLevel: 'HIGH',
-          updatedRatios: {
-            SAUCE: 30,
-            WBTC: 5
-          },
-          previousRatios: {
-            SAUCE: 25,
-            WBTC: 3
-          },
-          tokenIds: {
-            SAUCE: '0.0.1183558',
-            WBTC: '0.0.6212930'
-          },
-          changedParameter: 'treasury.weights.SAUCE',
-          changedValue: {
-            old: 25,
-            new: 30
-          },
-          changeMagnitude: 5,
-          effectiveTimestamp: new Date().toISOString(),
-          transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
-          changeSummary: 'SAUCE: 25% ↑ 30% (+5%), WBTC: 3% ↑ 5% (+2%)',
-          reason: 'Governance vote executed - contract ratios updated',
-          requiresImmediateRebalance: true
+              sauce: {
+          p: 'hcs-10',
+          op: 'balance_alert',
+          operator_id: operatorId,
+          m: 'Balance Alert: SAUCE weight changed from 25 to 30 (5 weight change)',
+          data: {
+            type: 'GOVERNANCE_RATIO_UPDATE',
+            alertLevel: 'NORMAL',
+            weights: {
+              HBAR: 50,
+              WBTC: 4,
+              SAUCE: 30,
+              USDC: 30,
+              JAM: 30,
+              HEADSTART: 20
+            },
+            changedToken: 'SAUCE',
+            changedValue: {
+              old: 25,
+              new: 30
+            },
+            changeMagnitude: 5,
+            effectiveTimestamp: new Date().toISOString(),
+            transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
+            reason: 'Governance vote executed - contract ratios updated',
+            requiresImmediateRebalance: false
+          }
         },
-        m: 'Balance Alert: treasury.weights.SAUCE changed from 25% to 30% (5% change)'
-      },
-      usdc: {
-        p: 'hcs-10',
-        op: 'balance_alert',
-        operator_id: operatorId,
-        data: {
-          type: 'GOVERNANCE_RATIO_UPDATE',
-          alertLevel: 'HIGH',
-          updatedRatios: {
-            USDC: 20,
-            JAM: 8
-          },
-          previousRatios: {
-            USDC: 15,
-            JAM: 5
-          },
-          tokenIds: {
-            USDC: '0.0.6200902',
-            JAM: '0.0.6212931'
-          },
-          changedParameter: 'treasury.weights.USDC',
-          changedValue: {
-            old: 15,
-            new: 20
-          },
-          changeMagnitude: 5,
-          effectiveTimestamp: new Date().toISOString(),
-          transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
-          changeSummary: 'USDC: 15% ↑ 20% (+5%), JAM: 5% ↑ 8% (+3%)',
-          reason: 'Governance vote executed - contract ratios updated',
-          requiresImmediateRebalance: true
-        },
-        m: 'Balance Alert: treasury.weights.USDC changed from 15% to 20% (5% change)'
-      }
+              usdc: {
+          p: 'hcs-10',
+          op: 'balance_alert',
+          operator_id: operatorId,
+          m: 'Balance Alert: USDC weight changed from 15 to 20 (5 weight change)',
+          data: {
+            type: 'GOVERNANCE_RATIO_UPDATE',
+            alertLevel: 'NORMAL',
+            weights: {
+              HBAR: 50,
+              WBTC: 4,
+              SAUCE: 30,
+              USDC: 20,
+              JAM: 30,
+              HEADSTART: 20
+            },
+            changedToken: 'USDC',
+            changedValue: {
+              old: 15,
+              new: 20
+            },
+            changeMagnitude: 5,
+            effectiveTimestamp: new Date().toISOString(),
+            transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
+            reason: 'Governance vote executed - contract ratios updated',
+            requiresImmediateRebalance: false
+          }
+        }
     };
 
     const alertData = alerts[alertType];
@@ -274,7 +258,7 @@ class SimpleAlertSender {
       throw new Error(`Unknown alert type: ${alertType}`);
     }
 
-    console.log(`🚨 Sending ${alertType.toUpperCase()} governance alert to topic...`);
+    console.log(`🚨 Sending ${alertType.toUpperCase()} balance alert to topic...`);
     console.log(`📊 Alert data:`, JSON.stringify(alertData, null, 2));
     
     try {
@@ -282,11 +266,11 @@ class SimpleAlertSender {
         input: `Submit a message to topic ${this.topicId} with this JSON content: ${JSON.stringify(alertData)}`
       });
       
-      console.log("✅ Governance alert sent successfully");
+      console.log("✅ Balance alert sent successfully");
       console.log(`📤 Response: ${response.output}`);
       
     } catch (error) {
-      console.error(`❌ Failed to send ${alertType} governance alert:`, error);
+      console.error(`❌ Failed to send ${alertType} balance alert:`, error);
       throw error;
     }
   }
@@ -296,8 +280,8 @@ class SimpleAlertSender {
  * Main function
  */
 async function main(): Promise<void> {
-  console.log("🦌⚡ Simple Alert Sender Test");
-  console.log("============================");
+  console.log("🦌⚡ Balance Alert Sender Test");
+  console.log("=============================");
 
   const args = process.argv.slice(2);
   const command = args[0] || 'hbar';
@@ -318,25 +302,25 @@ async function main(): Promise<void> {
         await sender.sendAlert('usdc');
         break;
       default:
-        console.log("📋 Available governance alert commands:");
-        console.log("  hbar    - Send HBAR governance ratio update (50% → 40%, USDC 15% → 20%)");
-        console.log("  sauce   - Send SAUCE governance ratio update (25% → 30%, WBTC 3% → 5%)");
-        console.log("  usdc    - Send USDC governance ratio update (15% → 20%, JAM 5% → 8%)");
+        console.log("📋 Available balance alert commands:");
+        console.log("  hbar    - Send HBAR weight change alert (50 → 40, 10 weight change)");
+        console.log("  sauce   - Send SAUCE weight change alert (25 → 30, 5 weight change)");
+        console.log("  usdc    - Send USDC weight change alert (15 → 20, 5 weight change)");
         console.log("\n💡 Examples:");
         console.log("   npm run test:alert hbar");
         console.log("   npm run test:alert sauce");
         console.log("   npm run test:alert usdc");
-        console.log("\n📊 These alerts use the governance agent schema with:");
-        console.log("   - Updated target ratios for affected tokens only");
-        console.log("   - Token ID mappings for precise identification");
-        console.log("   - Change magnitude and alert levels");
+        console.log("\n📊 These alerts use the HCS-10 protocol with:");
+        console.log("   - Token weight multipliers for governance updates");
+        console.log("   - Alert levels (HIGH/NORMAL) based on change magnitude");
+        console.log("   - Complete weight state for all tokens");
         console.log("   - Transaction IDs and timestamps");
-        console.log("   - All alerts set to requiresImmediateRebalance: true");
+        console.log("   - Immediate rebalance flags for significant changes");
         break;
     }
 
   } catch (error) {
-    console.error("❌ Failed to send alert:", error);
+    console.error("❌ Failed to send balance alert:", error);
     process.exit(1);
   }
 }
