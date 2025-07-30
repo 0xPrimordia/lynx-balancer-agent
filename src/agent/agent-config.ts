@@ -23,6 +23,7 @@ export interface EnvironmentConfig {
   CONTRACT_JAM_TOKEN?: string;
   CONTRACT_HEADSTART_TOKEN?: string;
   TREASURY_ACCOUNT_ID?: string;
+  SNAPSHOT_REGISTRY_TOPIC_ID?: string;
 }
 
 export interface GovernanceRatioUpdate {

@@ -14,6 +14,7 @@
     "register-agent": "tsx scripts/register-agent.ts",
     "test:balancing": "tsx src/test-balancing.ts",
     "test:alert": "tsx src/send-test-alert.ts",
+    "fund-contract": "tsx src/fund-contract.ts",
     "type-check": "tsc --noEmit",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix"

@@ -14,6 +14,34 @@ import { HederaLangchainToolkit } from 'hedera-agent-kit';
 config();
 
 /**
+ * Governance Agent Balance Alert Message Schema
+ */
+interface BalanceAlertMessage {
+  p: 'hcs-10';                    // Protocol identifier
+  op: 'balance_alert';            // Operation type
+  operator_id: string;            // Format: "{inboundTopicId}@{accountId}"
+  data: {
+    type: 'GOVERNANCE_RATIO_UPDATE';
+    alertLevel: 'NORMAL' | 'HIGH';  // Based on change magnitude (>5% = HIGH)
+    updatedRatios: Record<string, number>;  // New target ratios by token name
+    previousRatios: Record<string, number>; // Old ratios for comparison
+    tokenIds: Record<string, string>;       // Token ID mapping (name -> ID)
+    changedParameter: string;      // e.g., "treasury.weights.HBAR"
+    changedValue: {
+      old: number;
+      new: number;
+    };
+    changeMagnitude: number;       // Absolute difference between old/new
+    effectiveTimestamp: string;    // ISO timestamp
+    transactionId: string;         // Contract update transaction ID
+    changeSummary: string;         // Human-readable summary
+    reason: string;                // "Governance vote executed - contract ratios updated"
+    requiresImmediateRebalance: boolean;  // true if change > 5%
+  };
+  m: string;                      // Human-readable message
+}
+
+/**
  * Simple Alert Sender
  * 
  * This script ONLY sends HCS-10 alerts to the balancer agent
@@ -129,49 +157,124 @@ class SimpleAlertSender {
   }
 
   /**
-   * Send a test alert to the balancer agent topic
+   * Send a test alert to the balancer agent topic using governance agent schema
    */
   async sendAlert(alertType: string): Promise<void> {
     if (!this.agentExecutor || !this.topicId) {
       throw new Error("Agent executor or topic ID not initialized");
     }
-    const alerts = {
+
+    const env = process.env;
+    const operatorId = `${env.BALANCER_INBOUND_TOPIC_ID || '0.0.123456'}@${env.HEDERA_ACCOUNT_ID}`;
+
+    const alerts: Record<string, BalanceAlertMessage> = {
       hbar: {
-        type: 'BALANCING_ALERT',
-        token: 'HBAR',
-        currentRatio: 99,
-        targetRatio: 40,
-        deviation: 59,
-        alertLevel: 'CRITICAL',
-        reason: 'HBAR ratio severely exceeded target - portfolio is 99% HBAR vs 40% target'
+        p: 'hcs-10',
+        op: 'balance_alert',
+        operator_id: operatorId,
+        data: {
+          type: 'GOVERNANCE_RATIO_UPDATE',
+          alertLevel: 'HIGH',
+          updatedRatios: {
+            HBAR: 40,
+            USDC: 20
+          },
+          previousRatios: {
+            HBAR: 50,
+            USDC: 15
+          },
+          tokenIds: {
+            HBAR: 'HBAR', // HBAR doesn't have a token ID
+            USDC: '0.0.6212931'
+          },
+          changedParameter: 'treasury.weights.HBAR',
+          changedValue: {
+            old: 50,
+            new: 40
+          },
+          changeMagnitude: 10,
+          effectiveTimestamp: new Date().toISOString(),
+          transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
+          changeSummary: 'HBAR: 50% ↓ 40% (-10%), USDC: 15% ↑ 20% (+5%)',
+          reason: 'Governance vote executed - contract ratios updated',
+          requiresImmediateRebalance: true
+        },
+        m: 'Balance Alert: treasury.weights.HBAR changed from 50% to 40% (10% change)'
       },
       sauce: {
-        type: 'BALANCING_ALERT',
-        token: 'SAUCE',
-        tokenId: '0.0.1183558',
-        currentRatio: 5,
-        targetRatio: 20,
-        deviation: 15,
-        alertLevel: 'HIGH',
-        reason: 'SAUCE ratio below target - need to buy more SAUCE (5% vs 20% target)'
+        p: 'hcs-10',
+        op: 'balance_alert',
+        operator_id: operatorId,
+        data: {
+          type: 'GOVERNANCE_RATIO_UPDATE',
+          alertLevel: 'HIGH',
+          updatedRatios: {
+            SAUCE: 30,
+            WBTC: 5
+          },
+          previousRatios: {
+            SAUCE: 25,
+            WBTC: 3
+          },
+          tokenIds: {
+            SAUCE: '0.0.1183558',
+            WBTC: '0.0.6212930'
+          },
+          changedParameter: 'treasury.weights.SAUCE',
+          changedValue: {
+            old: 25,
+            new: 30
+          },
+          changeMagnitude: 5,
+          effectiveTimestamp: new Date().toISOString(),
+          transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
+          changeSummary: 'SAUCE: 25% ↑ 30% (+5%), WBTC: 3% ↑ 5% (+2%)',
+          reason: 'Governance vote executed - contract ratios updated',
+          requiresImmediateRebalance: true
+        },
+        m: 'Balance Alert: treasury.weights.SAUCE changed from 25% to 30% (5% change)'
       },
       usdc: {
-        type: 'BALANCING_ALERT',
-        token: 'USDC',
-        currentRatio: 15,
-        targetRatio: 10,
-        deviation: 5,
-        alertLevel: 'MEDIUM',
-        reason: 'USDC ratio exceeded target by 5%'
+        p: 'hcs-10',
+        op: 'balance_alert',
+        operator_id: operatorId,
+        data: {
+          type: 'GOVERNANCE_RATIO_UPDATE',
+          alertLevel: 'HIGH',
+          updatedRatios: {
+            USDC: 20,
+            JAM: 8
+          },
+          previousRatios: {
+            USDC: 15,
+            JAM: 5
+          },
+          tokenIds: {
+            USDC: '0.0.6200902',
+            JAM: '0.0.6212931'
+          },
+          changedParameter: 'treasury.weights.USDC',
+          changedValue: {
+            old: 15,
+            new: 20
+          },
+          changeMagnitude: 5,
+          effectiveTimestamp: new Date().toISOString(),
+          transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
+          changeSummary: 'USDC: 15% ↑ 20% (+5%), JAM: 5% ↑ 8% (+3%)',
+          reason: 'Governance vote executed - contract ratios updated',
+          requiresImmediateRebalance: true
+        },
+        m: 'Balance Alert: treasury.weights.USDC changed from 15% to 20% (5% change)'
       }
     };
 
-    const alertData = alerts[alertType as keyof typeof alerts];
+    const alertData = alerts[alertType];
     if (!alertData) {
       throw new Error(`Unknown alert type: ${alertType}`);
     }
 
-    console.log(`🚨 Sending ${alertType.toUpperCase()} alert to topic...`);
+    console.log(`🚨 Sending ${alertType.toUpperCase()} governance alert to topic...`);
     console.log(`📊 Alert data:`, JSON.stringify(alertData, null, 2));
     
     try {
@@ -179,11 +282,11 @@ class SimpleAlertSender {
         input: `Submit a message to topic ${this.topicId} with this JSON content: ${JSON.stringify(alertData)}`
       });
       
-      console.log("✅ Alert sent successfully");
+      console.log("✅ Governance alert sent successfully");
       console.log(`📤 Response: ${response.output}`);
       
     } catch (error) {
-      console.error(`❌ Failed to send ${alertType} alert:`, error);
+      console.error(`❌ Failed to send ${alertType} governance alert:`, error);
       throw error;
     }
   }
@@ -215,14 +318,20 @@ async function main(): Promise<void> {
         await sender.sendAlert('usdc');
         break;
       default:
-        console.log("📋 Available commands:");
-        console.log("  hbar    - Send HBAR balancing alert");
-        console.log("  sauce   - Send SAUCE balancing alert");
-        console.log("  usdc    - Send USDC balancing alert");
+        console.log("📋 Available governance alert commands:");
+        console.log("  hbar    - Send HBAR governance ratio update (50% → 40%, USDC 15% → 20%)");
+        console.log("  sauce   - Send SAUCE governance ratio update (25% → 30%, WBTC 3% → 5%)");
+        console.log("  usdc    - Send USDC governance ratio update (15% → 20%, JAM 5% → 8%)");
         console.log("\n💡 Examples:");
         console.log("   npm run test:alert hbar");
         console.log("   npm run test:alert sauce");
         console.log("   npm run test:alert usdc");
+        console.log("\n📊 These alerts use the governance agent schema with:");
+        console.log("   - Updated target ratios for affected tokens only");
+        console.log("   - Token ID mappings for precise identification");
+        console.log("   - Change magnitude and alert levels");
+        console.log("   - Transaction IDs and timestamps");
+        console.log("   - All alerts set to requiresImmediateRebalance: true");
         break;
     }
 
