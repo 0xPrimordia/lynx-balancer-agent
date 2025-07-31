@@ -9,7 +9,7 @@ import { HederaLangchainToolkit } from 'hedera-agent-kit';
 import { TokenTransferTool } from '../tools/token-transfer-tool.js';
 import { HbarWithdrawalTool } from '../tools/hbar-withdrawal-tool.js';
 import { TokenWithdrawalTool } from '../tools/token-withdrawal-tool.js';
-import { TopicQueryTool } from '../tools/topic-query-tool.js';
+
 import { ContractRatioTool, TokenSupplyTool } from '../tools/contract-ratio-tool.js';
 
 // Load environment variables
@@ -64,9 +64,6 @@ export class LynxBalancerAgent {
 
   // Contract divisor (currently hardcoded to 10, will be DAO parameter in future)
   private readonly CONTRACT_DIVISOR = 10;
-  
-  // Lynx token supply (will be updated from governance contract)
-  private lynxTotalSupply: number = 0;
   
   // Cached balance state
   private contractBalances: {
@@ -132,7 +129,6 @@ export class LynxBalancerAgent {
     try {
       console.log("📊 Getting Lynx total supply from governance contract...");
       
-      // Query the Hedera network for Lynx token total supply using the dedicated tool
       const response = await this.agentExecutor.invoke({
         input: `Use the token_supply_query tool to get the total supply of Lynx tokens with token ID ${this.env.CONTRACT_LYNX_TOKEN}. Return ONLY the humanReadableSupply value from the JSON response.`
       });
@@ -144,16 +140,21 @@ export class LynxBalancerAgent {
         console.log(`📊 Lynx total supply: ${totalSupply}`);
         return totalSupply;
       } else {
-        console.error("❌ CRITICAL ERROR: Could not parse Lynx total supply from response");
-        console.error("Raw response:", response.output);
         throw new Error("Failed to parse Lynx total supply from contract query response");
       }
     } catch (error) {
-      console.error("❌ CRITICAL ERROR: Failed to get Lynx total supply from governance contract");
-      console.error("This is required for accurate treasury calculations");
-      console.error("Error details:", error);
+      console.error("❌ CRITICAL ERROR: Failed to get Lynx total supply from governance contract", error);
       throw new Error(`Failed to get Lynx total supply: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * Execute full rebalancing based on current contract ratios
+   * This is the main rebalancing function that can be called from startup or alerts
+   */
+  async executeRebalancing(): Promise<void> {
+    console.log("⚖️  Executing portfolio rebalancing...");
+    await this.validateTreasuryRatios();
   }
 
   /**
@@ -299,49 +300,6 @@ HEADSTART: 3
     }
   }
 
-  /**
-   * Convert raw token amount to human-readable amount
-   */
-  private convertRawToHumanAmount(rawAmount: number, tokenName: string): number {
-    const tokenConfig = this.getTokenConfig(tokenName);
-    if (!tokenConfig) {
-      throw new Error(`Unknown token: ${tokenName}`);
-    }
-
-    return rawAmount / Math.pow(10, tokenConfig.decimals);
-  }
-
-  /**
-   * Convert human-readable amount to raw token amount
-   */
-  private convertHumanToRawAmount(humanAmount: number, tokenName: string): number {
-    const tokenConfig = this.getTokenConfig(tokenName);
-    if (!tokenConfig) {
-      throw new Error(`Unknown token: ${tokenName}`);
-    }
-
-    return humanAmount * Math.pow(10, tokenConfig.decimals);
-  }
-
-  /**
-   * Calculate current weight ratio from actual balances
-   * This calculates what weight ratio the current token amount represents
-   */
-  private calculateCurrentWeightRatio(currentAmount: number, lynxTotalSupply: number, tokenName: string): number {
-    const tokenConfig = this.getTokenConfig(tokenName);
-    if (!tokenConfig) {
-      throw new Error(`Unknown token: ${tokenName}`);
-    }
-
-    // Convert current amount to raw units
-    const rawCurrentAmount = this.convertHumanToRawAmount(currentAmount, tokenName);
-    
-    // Calculate weight ratio using the reverse of the minting formula
-    // weightRatio = (rawAmount * divisor) / (lynxTotalSupply * 10^decimals)
-    const weightRatio = (rawCurrentAmount * this.CONTRACT_DIVISOR) / (lynxTotalSupply * Math.pow(10, tokenConfig.decimals));
-    
-    return weightRatio;
-  }
 
   /**
    * Initialize the balancer agent
@@ -416,22 +374,20 @@ HEADSTART: 3
       // Create the agent prompt template
       const prompt = ChatPromptTemplate.fromMessages([
         ['system', `You are a treasury balancing agent for the Lynx DAO.
-        You have access to Hedera blockchain tools that allow you to:
-        - Query account balances and information
-        - Check token balances for specific accounts
-        - Transfer HBAR between accounts
-        - Transfer tokens between accounts
-        - Call contract functions for withdrawals
-        
-        Current Configuration:
-        - Operator Account: ${this.env.HEDERA_ACCOUNT_ID}
-        - Governance Contract: ${this.env.GOVERNANCE_CONTRACT_ID}
-        - Network: ${this.env.HEDERA_NETWORK || 'testnet'}
-        
-        Your job is to maintain target portfolio ratios by rebalancing token holdings.
-        `],
-        ['placeholder', '{chat_history}'],
-        ['human', '{input}'],
+          You have access to Hedera blockchain tools that allow you to:
+          - Query account balances and information
+          - Check token balances for specific accounts
+          - Transfer HBAR between accounts
+          - Transfer tokens between accounts
+          - Call contract functions for withdrawals
+
+          Current Configuration:
+          - Operator Account: ${this.env.HEDERA_ACCOUNT_ID}
+          - Governance Contract: ${this.env.GOVERNANCE_CONTRACT_ID}
+          - Network: ${this.env.HEDERA_NETWORK || 'testnet'}
+
+          Your job is to maintain target portfolio ratios by rebalancing token holdings.`],
+        ['user', '{input}'],
         ['placeholder', '{agent_scratchpad}'],
       ]);
 
@@ -440,10 +396,10 @@ HEADSTART: 3
       const tokenTransferTool = new TokenTransferTool(this.client);
       const hbarWithdrawalTool = new HbarWithdrawalTool(this.client);
       const tokenWithdrawalTool = new TokenWithdrawalTool(this.client);
-      const topicQueryTool = new TopicQueryTool(this.client, this.env.BALANCER_ALERT_TOPIC_ID || '0.0.0');
       const contractRatioTool = new ContractRatioTool(this.client);
       const tokenSupplyTool = new TokenSupplyTool(this.client);
-      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, tokenWithdrawalTool, topicQueryTool, contractRatioTool, tokenSupplyTool];
+      // Using built-in get-topic-messages-query instead of custom topic query tool
+      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, tokenWithdrawalTool, contractRatioTool, tokenSupplyTool];
 
       // Create the tool-calling agent (following tool-calling-balance-check pattern)
       const agent = await createToolCallingAgent({
@@ -542,12 +498,12 @@ HEADSTART: 3
       console.log("📊 Initializing contract balance cache...");
       await this.refreshContractBalances();
 
-      // Validate treasury ratios against contract settings
-      await this.validateTreasuryRatios();
+      // Execute initial rebalancing on startup
+      await this.executeRebalancing();
 
-      // Get all topic messages once on startup using our custom tool
+      // Check for recent messages using the built-in tool
       const response = await this.agentExecutor.invoke({
-        input: `Use the topic_query_tool to get all messages from topic ${this.env.BALANCER_ALERT_TOPIC_ID}. Return the exact JSON output.`
+        input: `Use the get-topic-messages-query tool to check topic ${this.env.BALANCER_ALERT_TOPIC_ID}. Tell me if there are any messages from the last 5 minutes. Just answer YES or NO with the count of recent messages.`
       });
 
       console.log("🔍 Processing topic messages...");
@@ -564,439 +520,33 @@ HEADSTART: 3
   }
 
   /**
-   * Process all alert messages from the topic
+   * Check for recent alerts and trigger rebalancing if found
+   * Simplified: Just check if the agent found any recent messages
    */
   private async processAllAlerts(messagesOutput: string): Promise<void> {
     try {
-      console.log("🔍 Processing all alert messages...");
+      console.log("🔍 Checking agent response for recent alerts...");
+      console.log(`📋 Agent response: ${messagesOutput}`);
 
-      // Try to parse as JSON first (from our custom tool)
-      let alertMessages: any[] = [];
-      try {
-        // Extract JSON from the formatted response
-        const jsonMatch = messagesOutput.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-        if (jsonMatch) {
-          const jsonResponse = JSON.parse(jsonMatch[1]);
-          if (jsonResponse.governanceAlerts && Array.isArray(jsonResponse.governanceAlerts)) {
-            console.log(`📋 Found ${jsonResponse.governanceAlerts.length} governance alerts from topic query tool`);
-            
-            // Use the pre-parsed governance alerts
-            alertMessages = jsonResponse.governanceAlerts.map((alert: any) => alert.alertData);
-          }
-        } else {
-          // Try parsing the entire output as JSON
-          const jsonResponse = JSON.parse(messagesOutput);
-          if (jsonResponse.governanceAlerts && Array.isArray(jsonResponse.governanceAlerts)) {
-            console.log(`📋 Found ${jsonResponse.governanceAlerts.length} governance alerts from topic query tool`);
-            alertMessages = jsonResponse.governanceAlerts.map((alert: any) => alert.alertData);
-          }
-        }
-      } catch (jsonError) {
-        // Fallback to old parsing method if JSON parsing fails
-        console.log("⚠️  JSON parsing failed, falling back to text parsing");
-        alertMessages = this.parseTopicMessages(messagesOutput);
-      }
-      
-      if (alertMessages.length === 0) {
-        console.log("⚠️  No alert messages found in topic");
-        return;
-      }
+      // Simple check: look for YES in the response
+      const hasRecentAlert = messagesOutput.toLowerCase().includes('yes');
 
-      console.log(`📋 Found ${alertMessages.length} alert messages to process`);
-
-      const currentTime = new Date();
-      const MAX_AGE_MINUTES = 5; // Skip alerts older than 5 minutes
-
-      // Process each alert message
-      for (const alertMessage of alertMessages) {
-        // Skip old BALANCING_ALERT messages completely - we only want GOVERNANCE_RATIO_UPDATE
-        if (alertMessage.type === 'BALANCING_ALERT') {
-          console.log(`⏭️  Skipping old BALANCING_ALERT`);
-          continue;
-        }
-        
-        // Time-based filtering for governance alerts
-        if (alertMessage.type === 'GOVERNANCE_RATIO_UPDATE' && alertMessage.effectiveTimestamp) {
-          const alertTime = new Date(alertMessage.effectiveTimestamp);
-          const ageInMinutes = (currentTime.getTime() - alertTime.getTime()) / (1000 * 60);
-          
-          if (ageInMinutes > MAX_AGE_MINUTES) {
-            console.log(`⏭️  Skipping old governance alert (${ageInMinutes.toFixed(1)} minutes old)`);
-            continue;
-          }
-          
-          // Skip alerts that don't require immediate rebalancing
-          if (!alertMessage.requiresImmediateRebalance) {
-            console.log(`⏭️  Skipping governance alert - no immediate rebalance required`);
-            continue;
-          }
-          
-          console.log(`✅ Processing governance alert (${ageInMinutes.toFixed(1)} minutes old)`);
-        }
-        
-        await this.processBalancingAlert(alertMessage);
-      }
-
-      console.log("✅ All alerts processed");
-
-    } catch (error) {
-      console.error("❌ Error processing all alerts:", error);
-    }
-  }
-
-  /**
-   * Parse topic messages from the structured text format
-   */
-  private parseTopicMessages(messagesOutput: string): any[] {
-    const alertMessages: any[] = [];
-    
-    try {
-      // Look for alert patterns in the message content
-      const alertPatterns = [
-        /HBAR ratio.*target/i,
-        /SAUCE ratio.*target/i,
-        /USDC ratio.*target/i,
-        /GOVERNANCE_RATIO_UPDATE/i,
-        /balance_alert/i
-      ];
-
-      // Split by sequence numbers to get individual messages
-      const messageBlocks = messagesOutput.split(/\d+\.\s+\*\*Sequence Number:\*\*/);
-      console.log(`🔍 Found ${messageBlocks.length} message blocks in topic`);
-      
-      for (let i = 0; i < messageBlocks.length; i++) {
-        const block = messageBlocks[i];
-        if (!block.trim()) continue;
-
-        // Extract message content
-        const contentMatch = block.match(/\*\*Message Content:\*\*\s*(.+?)(?:\n|$)/);
-        if (!contentMatch) {
-          console.log(`⚠️  No message content found in block ${i}`);
-          continue;
-        }
-
-        const messageContent = contentMatch[1].trim();
-        console.log(`🔍 Message ${i}: ${messageContent.substring(0, 100)}...`);
-        
-        // Check if this is an alert message (not a completion message)
-        const isAlert = alertPatterns.some(pattern => pattern.test(messageContent));
-        if (!isAlert) {
-          console.log(`⏭️  Message ${i} is not an alert (no pattern match)`);
-          continue;
-        }
-
-        console.log(`✅ Message ${i} matches alert pattern`);
-
-        // Parse the alert content to create a structured alert object
-        const alert = this.parseAlertContent(messageContent);
-        if (alert) {
-          console.log(`✅ Parsed alert ${i}: type=${alert.type}`);
-          alertMessages.push(alert);
-        } else {
-          console.log(`❌ Failed to parse alert ${i}`);
-        }
-      }
-
-      console.log(`🔍 Parsed ${alertMessages.length} alert messages from topic`);
-      return alertMessages;
-
-    } catch (error) {
-      console.error("❌ Error parsing topic messages:", error);
-      return [];
-    }
-  }
-
-  /**
-   * Parse alert content into a structured alert object
-   */
-  private parseAlertContent(messageContent: string): any | null {
-    try {
-      // Check if this is a JSON alert (new format)
-      if (messageContent.startsWith('{') && messageContent.endsWith('}')) {
-        try {
-          return JSON.parse(messageContent);
-        } catch (jsonError) {
-          console.log("⚠️  Failed to parse JSON alert, falling back to text parsing");
-        }
-      }
-
-      // Determine token type from text content
-      let token = 'UNKNOWN';
-      if (messageContent.includes('HBAR')) token = 'HBAR';
-      else if (messageContent.includes('SAUCE')) token = 'SAUCE';
-      else if (messageContent.includes('USDC')) token = 'USDC';
-
-      // Create a basic alert structure
-      const alert = {
-        type: 'BALANCING_ALERT',
-        token: token,
-        currentRatio: 0, // We'll let the actual balance check determine this
-        targetRatio: 40, // Default target ratio
-        deviation: 0,
-        alertLevel: 'MEDIUM',
-        reason: messageContent
-      };
-
-      // Try to extract target ratio if mentioned
-      const targetMatch = messageContent.match(/(\d+)%?\s*target/i);
-      if (targetMatch) {
-        alert.targetRatio = parseInt(targetMatch[1]);
-      }
-
-      return alert;
-
-    } catch (error) {
-      console.error("❌ Error parsing alert content:", messageContent, error);
-      return null;
-    }
-  }
-
-  /**
-   * Validate alert accuracy by checking if current weight matches actual balance
-   */
-  private async validateAlertAccuracy(alert: any): Promise<boolean> {
-    try {
-      // Skip validation for alerts without currentRatio (let balance check determine)
-      if (!alert.currentRatio || alert.currentRatio === 0) {
-        return true;
-      }
-
-      // Get actual balances
-      const balances = await this.getContractBalances();
-      
-      let actualCurrentWeight = 0;
-      if (alert.token === 'HBAR') {
-        // Calculate current weight for HBAR
-        const currentAmount = balances.hbar;
-        const lynxTotalSupply = await this.getLynxTotalSupply();
-        actualCurrentWeight = this.calculateCurrentWeightRatio(currentAmount, lynxTotalSupply, 'HBAR');
-      } else if (alert.tokenId) {
-        // Calculate current weight for token using tokenId
-        const tokenValue = this.getTokenValueFromBalances(balances, alert.tokenId);
-        const tokenConfig = this.getTokenConfig(alert.tokenId);
-        if (tokenConfig) {
-          const lynxTotalSupply = await this.getLynxTotalSupply();
-          actualCurrentWeight = this.calculateCurrentWeightRatio(tokenValue, lynxTotalSupply, tokenConfig.name);
-        }
+      if (hasRecentAlert) {
+        console.log("🚨 Recent alert detected - executing full rebalancing...");
+        await this.executeRebalancing();
+        console.log("✅ Rebalancing completed in response to alert");
       } else {
-        console.log(`⚠️  No tokenId provided for ${alert.token} alert, skipping validation`);
-        return false;
+        console.log("⏭️  No recent alerts found - no rebalancing needed");
       }
 
-      // Check if alert weight is reasonably close to actual weight (within 5 weight units)
-      const weightDifference = Math.abs(actualCurrentWeight - alert.currentRatio);
-      const isAccurate = weightDifference <= 5;
-
-      console.log(`🔍 Alert validation for ${alert.token}:`);
-      console.log(`   Alert weight: ${alert.currentRatio}`);
-      console.log(`   Actual weight: ${actualCurrentWeight.toFixed(1)}`);
-      console.log(`   Difference: ${weightDifference.toFixed(1)}`);
-      console.log(`   Accurate: ${isAccurate ? '✅' : '❌'}`);
-
-      return isAccurate;
+      console.log("✅ Alert check completed");
 
     } catch (error) {
-      console.error("❌ Error validating alert accuracy:", error);
-      return false;
+      console.error("❌ Error checking alerts:", error);
     }
   }
 
-  /**
-   * Get token value from balances by tokenId
-   */
-  private getTokenValueFromBalances(balances: any, tokenId: string): number {
-    return balances.tokens[tokenId] || 0;
-  }
 
-
-
-  /**
-   * Check if an alert already has a completion message
-   */
-  private async checkForCompletion(alert: any): Promise<boolean> {
-    if (!this.agentExecutor) return false;
-
-    try {
-      const topicId = this.env.BALANCER_ALERT_TOPIC_ID;
-      const response = await this.agentExecutor.invoke({
-        input: `Search topic ${topicId} for messages containing "BALANCING_COMPLETE" and check if this alert has already been completed`
-      });
-
-      // Check if there's a completion message for this specific alert
-      return response.output.includes('BALANCING_COMPLETE') && 
-             response.output.includes(alert.token) &&
-             response.output.includes(`${alert.currentRatio}`) &&
-             response.output.includes(`${alert.targetRatio}`);
-    } catch (error) {
-      console.error("❌ Error checking for completion:", error);
-      return false;
-    }
-  }
-
-  /**
-   * Process a balancing alert and execute rebalancing
-   */
-  private async processBalancingAlert(alert: any): Promise<void> {
-    if (!this.agentExecutor) return;
-
-    try {
-      // Handle governance ratio update alerts (weight-based system)
-      if (alert.type === 'GOVERNANCE_RATIO_UPDATE') {
-        console.log(`⚖️  Processing governance weight update...`);
-        console.log(`📋 Updated weights:`, alert.weights);
-        console.log(`📋 Changed token:`, alert.changedToken);
-        console.log(`📋 Change: ${alert.changedValue.old} → ${alert.changedValue.new} (${alert.changeMagnitude} weight change)`);
-        
-        // Get current balances
-        console.log(`📊 Step 1: Getting contract balances...`);
-        const balances = await this.getContractBalances();
-        
-        // Get the changed token configuration
-        const changedTokenName = alert.changedToken;
-        const tokenConfig = this.getTokenConfig(changedTokenName);
-        if (!tokenConfig) {
-          console.log(`⚠️  Unknown token: ${changedTokenName}, skipping rebalancing`);
-          return;
-        }
-        
-        console.log(`🔄 Processing ${changedTokenName} rebalancing...`);
-        console.log(`📋 Token config:`, tokenConfig);
-        
-        // Get current amount for the changed token
-        let currentAmount = 0;
-        if (changedTokenName === 'HBAR') {
-          currentAmount = balances.hbar;
-        } else {
-          currentAmount = balances.tokens[tokenConfig.tokenId] || 0;
-        }
-        
-        console.log(`📊 Current ${changedTokenName} amount: ${currentAmount}`);
-        
-        // Get Lynx total supply and calculate required amount using the minting formula
-        const targetWeight = alert.weights[changedTokenName];
-        const lynxTotalSupply = await this.getLynxTotalSupply();
-        
-        const requiredAmount = this.calculateRequiredAmount(lynxTotalSupply, targetWeight, changedTokenName);
-        
-        console.log(`📊 Target ${changedTokenName} amount: ${requiredAmount} ${changedTokenName}`);
-        
-        // Calculate how much we need to transfer
-        const amountToTransfer = requiredAmount - currentAmount;
-        
-        console.log(`📊 Amount to transfer: ${amountToTransfer} ${changedTokenName}`);
-        
-        // Execute the rebalancing
-        if (Math.abs(amountToTransfer) > 0.001) { // Only transfer if difference is significant
-          if (amountToTransfer > 0) {
-            // Need to buy (transfer TO contract)
-            console.log(`✅ Operation: Buying ${changedTokenName} (transferring to contract)`);
-            if (changedTokenName === 'HBAR') {
-              await this.executeHbarTransfer(amountToTransfer);
-            } else {
-              await this.executeTokenTransfer(tokenConfig.tokenId, amountToTransfer);
-            }
-          } else {
-            // Need to sell (withdraw FROM contract)
-            console.log(`✅ Operation: Selling ${changedTokenName} (withdrawing from contract)`);
-            if (changedTokenName === 'HBAR') {
-              await this.executeHbarWithdrawal(Math.abs(amountToTransfer));
-            } else {
-              await this.executeTokenWithdrawal(tokenConfig.tokenId, Math.abs(amountToTransfer));
-            }
-          }
-          
-          // Refresh balances after successful operation
-          await this.refreshContractBalances();
-        } else {
-          console.log(`✅ No transfer needed - already at target weight`);
-        }
-        
-        console.log(`✅ Governance weight update processing completed`);
-        return;
-      }
-      
-      // Handle legacy balancing alerts (converted to weight-based)
-      console.log(`⚖️  Executing rebalancing for ${alert.token}...`);
-      
-      // Extract key data from alert
-      const { token, currentRatio, targetRatio } = alert;
-      console.log(`📋 Alert: ${token} is ${currentRatio}%, target is ${targetRatio}%`);
-      
-      // Check token support
-      const tokenConfig = this.getTokenConfig(token);
-      if (!tokenConfig) {
-        console.log(`⚠️  Token ${token} rebalancing not supported yet.`);
-        return;
-      }
-      
-      // Step 1: Get current balances from cache
-      console.log(`📊 Step 1: Getting contract balances...`);
-      const balances = await this.getContractBalances();
-      
-      // Convert percentage-based target to weight-based target
-      // For legacy alerts, assume targetRatio is percentage, convert to weight
-      const targetWeight = targetRatio; // 1:1 conversion for now (40% = weight 40)
-      
-      // Get current amount for the token
-      let currentAmount = 0;
-      if (token === 'HBAR') {
-        currentAmount = balances.hbar;
-      } else {
-        currentAmount = balances.tokens[tokenConfig.tokenId] || 0;
-      }
-      
-      console.log(`📊 Current ${token} amount: ${currentAmount}`);
-      
-      // Get Lynx total supply and calculate required amount using the minting formula
-      const lynxTotalSupply = await this.getLynxTotalSupply();
-      
-      const requiredAmount = this.calculateRequiredAmount(lynxTotalSupply, targetWeight, token);
-      
-      console.log(`📊 Target ${token} amount: ${requiredAmount} ${token}`);
-      
-      // Calculate how much we need to transfer
-      const amountToTransfer = requiredAmount - currentAmount;
-      
-      console.log(`📊 Amount to transfer: ${amountToTransfer} ${token}`);
-      
-      // Execute the rebalancing
-      if (Math.abs(amountToTransfer) > 0.001) { // Only transfer if difference is significant
-        if (amountToTransfer > 0) {
-          // Need to buy (transfer TO contract)
-          console.log(`✅ Operation: Buying ${token} (transferring to contract)`);
-          if (token === 'HBAR') {
-            await this.executeHbarTransfer(amountToTransfer);
-          } else {
-            await this.executeTokenTransfer(tokenConfig.tokenId, amountToTransfer);
-          }
-        } else {
-          // Need to sell (withdraw FROM contract)
-          console.log(`✅ Operation: Selling ${token} (withdrawing from contract)`);
-          if (token === 'HBAR') {
-            await this.executeHbarWithdrawal(Math.abs(amountToTransfer));
-          } else {
-            await this.executeTokenWithdrawal(tokenConfig.tokenId, Math.abs(amountToTransfer));
-          }
-        }
-        
-        // Refresh balances after successful operation
-        await this.refreshContractBalances();
-      } else {
-        console.log(`✅ No transfer needed - already at target weight`);
-      }
-
-      console.log(`✅ Rebalancing completed for ${alert.token}`);
-
-    } catch (error) {
-      console.error(`❌ Rebalancing failed:`, error);
-      
-      // Send error completion message
-      await this.sendCompletionMessage(alert, {
-        status: 'error',
-        summary: `Rebalancing failed: ${error instanceof Error ? error.message : String(error)}`
-      });
-    }
-  }
 
   /**
    * Refresh contract balances from the blockchain and update cache
@@ -1134,76 +684,6 @@ TOKEN: 0.0.6200902 | BALANCE: 0 | DECIMALS: 8
   }
 
   /**
-   * Parse balance response to extract structured data (legacy method - keeping for compatibility)
-   */
-  private parseBalanceResponse(response: string): any {
-    console.log("🔍 Parsing actual balance response...");
-    
-          // Extract HBAR balance - handle multiple formats
-      let hbarMatch = response.match(/\*\*HBAR Balance:\*\*\s+([\d.]+)\s+HBAR/);
-      if (!hbarMatch) {
-        // Try alternative format: "**HBAR Balance**: 6,384,000 tinybars (equivalent to 63.84 HBAR)"
-        hbarMatch = response.match(/\*\*HBAR Balance\*\*:\s+[\d,]+\s+tinybars\s+\(equivalent to ([\d.]+) HBAR\)/);
-      }
-      if (!hbarMatch) {
-        // Try format: "**HBAR Balance**: 6,706,211.20 tinybars"
-        const tinybarMatch = response.match(/\*\*HBAR Balance\*\*:\s+([\d,.]+)\s+tinybars/);
-        if (tinybarMatch) {
-          const tinybars = parseFloat(tinybarMatch[1].replace(/,/g, ''));
-          hbarMatch = ['', (tinybars / 100000000).toString()]; // Convert tinybars to HBAR
-        }
-      }
-      if (!hbarMatch) {
-        // Try simple format: "**HBAR Balance:** 6,384,000 tinybars"
-        const tinybarMatch = response.match(/\*\*HBAR Balance:\*\*\s+([\d,]+)\s+tinybars/);
-        if (tinybarMatch) {
-          const tinybars = parseInt(tinybarMatch[1].replace(/,/g, ''));
-          hbarMatch = ['', (tinybars / 100000000).toString()]; // Convert tinybars to HBAR
-        }
-      }
-    const hbarBalance = hbarMatch ? parseFloat(hbarMatch[1]) : 0;
-    
-    console.log(`📊 Parsed HBAR balance: ${hbarBalance} HBAR`);
-    
-    // Extract all token balances with their IDs
-    const tokenMatches = response.matchAll(/\*\*Token ID\*\*:\s+(0\.0\.\d+)[\s\S]*?\*\*Balance\*\*:\s+([\d,]+)[\s\S]*?\*\*Decimals\*\*:\s+(\d+)/g);
-    let totalTokenValueInHbar = 0;
-    const tokens: {[key: string]: number} = {};
-    
-    for (const match of tokenMatches) {
-      const tokenId = match[1];
-      const rawBalance = parseInt(match[2].replace(/,/g, ''));
-      const decimals = parseInt(match[3]);
-      const actualBalance = rawBalance / Math.pow(10, decimals);
-      
-      // For simplicity, assume 1 token unit = 0.01 HBAR (this is a placeholder)
-      // TODO: Use real token prices or exchange rates
-      const tokenValueInHbar = actualBalance * 0.01;
-      totalTokenValueInHbar += tokenValueInHbar;
-      
-      // Store by token ID
-      tokens[tokenId] = tokenValueInHbar;
-      
-      console.log(`📊 Token ${tokenId}: ${rawBalance} raw (${actualBalance} actual) = ${tokenValueInHbar} HBAR equivalent`);
-    }
-    
-    const totalValue = hbarBalance + totalTokenValueInHbar;
-    
-    console.log(`📊 Total portfolio breakdown:`);
-    console.log(`   HBAR: ${hbarBalance} HBAR`);
-    console.log(`   Tokens: ${totalTokenValueInHbar} HBAR equivalent`);
-    console.log(`   Total: ${totalValue} HBAR equivalent`);
-    
-    return {
-      hbar: hbarBalance,
-      tokens: tokens,
-      totalValue: totalValue
-    };
-  }
-
-
-
-  /**
    * Execute HBAR transfer to the governance contract
    */
   private async executeHbarTransfer(amount: number): Promise<string> {
@@ -1273,41 +753,6 @@ TOKEN: 0.0.6200902 | BALANCE: 0 | DECIMALS: 8
     } catch (error) {
       console.error(`❌ Token withdrawal failed:`, error);
       throw error;
-    }
-  }
-
-
-
-
-
-  /**
-   * Send completion message to the topic
-   */
-  private async sendCompletionMessage(alert: any, result: {status: string, summary: string}): Promise<void> {
-    if (!this.agentExecutor) return;
-
-    try {
-      const topicId = this.env.BALANCER_ALERT_TOPIC_ID;
-      const completionMessage = {
-        type: 'BALANCING_COMPLETE',
-        token: alert.token,
-        currentRatio: alert.currentRatio,
-        targetRatio: alert.targetRatio,
-        status: result.status,
-        summary: result.summary,
-        timestamp: new Date().toISOString()
-      };
-
-      const response = await this.agentExecutor.invoke({
-        input: `Submit a message to topic ${topicId} with this JSON content: ${JSON.stringify(completionMessage)}`
-      });
-
-      console.log(`📤 Completion message sent for ${alert.token}`);
-      console.log(`   Status: ${result.status}`);
-      console.log(`   Summary: ${result.summary}`);
-
-    } catch (error) {
-      console.error(`❌ Failed to send completion message for ${alert.token}:`, error);
     }
   }
 
