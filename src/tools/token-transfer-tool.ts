@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Client, TransferTransaction, TokenId, AccountId, Hbar } from '@hashgraph/sdk';
+import { Client, TransferTransaction, TokenId, AccountId, Hbar, TokenInfoQuery } from '@hashgraph/sdk';
 import { StructuredTool } from '@langchain/core/tools';
 
 /**
@@ -12,7 +12,7 @@ class TokenTransferTool extends StructuredTool {
     tokenId: z.string().describe('The token ID to transfer (e.g., 0.0.1234567)'),
     fromAccountId: z.string().describe('The source account ID'),
     toAccountId: z.string().describe('The destination account ID (can be contract)'),
-    amount: z.string().describe('Amount to transfer in smallest units')
+    amount: z.string().describe('Amount to transfer in human-readable units (e.g., "34.199932" for USDC)')
   });
 
   constructor(private client: Client) {
@@ -27,17 +27,32 @@ class TokenTransferTool extends StructuredTool {
       console.log(`📤 From: ${fromAccountId}`);
       console.log(`📥 To: ${toAccountId}`);
 
+      // Get token info to determine decimals
+      const tokenInfoQuery = new TokenInfoQuery()
+        .setTokenId(TokenId.fromString(tokenId));
+      
+      const tokenInfo = await tokenInfoQuery.execute(this.client);
+      const decimals = tokenInfo.decimals;
+      
+      console.log(`🔍 Token ${tokenId} has ${decimals} decimals`);
+
+      // Convert human-readable amount to smallest units
+      const humanAmount = parseFloat(amount);
+      const smallestUnits = Math.round(humanAmount * Math.pow(10, decimals));
+      
+      console.log(`🔄 Converting ${humanAmount} to ${smallestUnits} smallest units`);
+
       // Create the transfer transaction
       const transferTx = new TransferTransaction()
         .addTokenTransfer(
           TokenId.fromString(tokenId),
           AccountId.fromString(fromAccountId),
-          -parseInt(amount)
+          -smallestUnits
         )
         .addTokenTransfer(
           TokenId.fromString(tokenId),
           AccountId.fromString(toAccountId),
-          parseInt(amount)
+          smallestUnits
         )
         .setMaxTransactionFee(Hbar.fromTinybars(100000000)); // 1 HBAR max fee
 
@@ -49,18 +64,11 @@ class TokenTransferTool extends StructuredTool {
       const receipt = await txResponse.getReceipt(this.client);
       console.log(`✅ Transaction completed with status: ${receipt.status}`);
 
-      return JSON.stringify({
-        success: true,
-        transactionId: txResponse.transactionId.toString(),
-        status: receipt.status.toString()
-      }, null, 2);
+      return `The transfer of ${humanAmount} units of token ${tokenId} from account ${fromAccountId} to contract ${toAccountId} was successful. The transaction ID is ${txResponse.transactionId}.`;
 
     } catch (error) {
       console.error('❌ Token transfer failed:', error);
-      return JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : String(error)
-      }, null, 2);
+      return `Token transfer failed: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
 }

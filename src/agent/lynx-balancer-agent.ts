@@ -9,7 +9,7 @@ import { HederaLangchainToolkit } from 'hedera-agent-kit';
 import { TokenTransferTool } from '../tools/token-transfer-tool.js';
 import { HbarWithdrawalTool } from '../tools/hbar-withdrawal-tool.js';
 import { TokenWithdrawalTool } from '../tools/token-withdrawal-tool.js';
-import { TopicQueryTool } from '../tools/topic-query-tool.js';
+
 import { ContractRatioTool, TokenSupplyTool } from '../tools/contract-ratio-tool.js';
 
 // Load environment variables
@@ -64,9 +64,6 @@ export class LynxBalancerAgent {
 
   // Contract divisor (currently hardcoded to 10, will be DAO parameter in future)
   private readonly CONTRACT_DIVISOR = 10;
-  
-  // Lynx token supply (will be updated from governance contract)
-  private lynxTotalSupply: number = 0;
   
   // Cached balance state
   private contractBalances: {
@@ -132,7 +129,6 @@ export class LynxBalancerAgent {
     try {
       console.log("📊 Getting Lynx total supply from governance contract...");
       
-      // Query the Hedera network for Lynx token total supply using the dedicated tool
       const response = await this.agentExecutor.invoke({
         input: `Use the token_supply_query tool to get the total supply of Lynx tokens with token ID ${this.env.CONTRACT_LYNX_TOKEN}. Return ONLY the humanReadableSupply value from the JSON response.`
       });
@@ -144,14 +140,10 @@ export class LynxBalancerAgent {
         console.log(`📊 Lynx total supply: ${totalSupply}`);
         return totalSupply;
       } else {
-        console.error("❌ CRITICAL ERROR: Could not parse Lynx total supply from response");
-        console.error("Raw response:", response.output);
         throw new Error("Failed to parse Lynx total supply from contract query response");
       }
     } catch (error) {
-      console.error("❌ CRITICAL ERROR: Failed to get Lynx total supply from governance contract");
-      console.error("This is required for accurate treasury calculations");
-      console.error("Error details:", error);
+      console.error("❌ CRITICAL ERROR: Failed to get Lynx total supply from governance contract", error);
       throw new Error(`Failed to get Lynx total supply: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -382,22 +374,20 @@ HEADSTART: 3
       // Create the agent prompt template
       const prompt = ChatPromptTemplate.fromMessages([
         ['system', `You are a treasury balancing agent for the Lynx DAO.
-        You have access to Hedera blockchain tools that allow you to:
-        - Query account balances and information
-        - Check token balances for specific accounts
-        - Transfer HBAR between accounts
-        - Transfer tokens between accounts
-        - Call contract functions for withdrawals
-        
-        Current Configuration:
-        - Operator Account: ${this.env.HEDERA_ACCOUNT_ID}
-        - Governance Contract: ${this.env.GOVERNANCE_CONTRACT_ID}
-        - Network: ${this.env.HEDERA_NETWORK || 'testnet'}
-        
-        Your job is to maintain target portfolio ratios by rebalancing token holdings.
-        `],
-        ['placeholder', '{chat_history}'],
-        ['human', '{input}'],
+          You have access to Hedera blockchain tools that allow you to:
+          - Query account balances and information
+          - Check token balances for specific accounts
+          - Transfer HBAR between accounts
+          - Transfer tokens between accounts
+          - Call contract functions for withdrawals
+
+          Current Configuration:
+          - Operator Account: ${this.env.HEDERA_ACCOUNT_ID}
+          - Governance Contract: ${this.env.GOVERNANCE_CONTRACT_ID}
+          - Network: ${this.env.HEDERA_NETWORK || 'testnet'}
+
+          Your job is to maintain target portfolio ratios by rebalancing token holdings.`],
+        ['user', '{input}'],
         ['placeholder', '{agent_scratchpad}'],
       ]);
 
@@ -406,10 +396,10 @@ HEADSTART: 3
       const tokenTransferTool = new TokenTransferTool(this.client);
       const hbarWithdrawalTool = new HbarWithdrawalTool(this.client);
       const tokenWithdrawalTool = new TokenWithdrawalTool(this.client);
-      const topicQueryTool = new TopicQueryTool(this.client, this.env.BALANCER_ALERT_TOPIC_ID || '0.0.0');
       const contractRatioTool = new ContractRatioTool(this.client);
       const tokenSupplyTool = new TokenSupplyTool(this.client);
-      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, tokenWithdrawalTool, topicQueryTool, contractRatioTool, tokenSupplyTool];
+      // Using built-in get-topic-messages-query instead of custom topic query tool
+      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, tokenWithdrawalTool, contractRatioTool, tokenSupplyTool];
 
       // Create the tool-calling agent (following tool-calling-balance-check pattern)
       const agent = await createToolCallingAgent({
@@ -511,9 +501,9 @@ HEADSTART: 3
       // Execute initial rebalancing on startup
       await this.executeRebalancing();
 
-      // Get all topic messages once on startup using our custom tool
+      // Check for recent messages using the built-in tool
       const response = await this.agentExecutor.invoke({
-        input: `Use the topic_query_tool to get all messages from topic ${this.env.BALANCER_ALERT_TOPIC_ID}. Return the exact JSON output.`
+        input: `Use the get-topic-messages-query tool to check topic ${this.env.BALANCER_ALERT_TOPIC_ID}. Tell me if there are any messages from the last 5 minutes. Just answer YES or NO with the count of recent messages.`
       });
 
       console.log("🔍 Processing topic messages...");
@@ -531,47 +521,16 @@ HEADSTART: 3
 
   /**
    * Check for recent alerts and trigger rebalancing if found
-   * Simplified: Any message within 5 minutes triggers full rebalancing
+   * Simplified: Just check if the agent found any recent messages
    */
   private async processAllAlerts(messagesOutput: string): Promise<void> {
     try {
-      console.log("🔍 Checking for recent alert messages...");
+      console.log("🔍 Checking agent response for recent alerts...");
+      console.log(`📋 Agent response: ${messagesOutput}`);
 
-      // Simple approach: check if there are any recent messages at all
-      const currentTime = new Date();
-      const MAX_AGE_MINUTES = 5;
-      let hasRecentAlert = false;
+      // Simple check: look for YES in the response
+      const hasRecentAlert = messagesOutput.toLowerCase().includes('yes');
 
-      // Parse basic message info from topic query tool response
-      try {
-        const jsonMatch = messagesOutput.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-        if (jsonMatch) {
-          const jsonResponse = JSON.parse(jsonMatch[1]);
-          if (jsonResponse.governanceAlerts && Array.isArray(jsonResponse.governanceAlerts)) {
-            console.log(`📋 Found ${jsonResponse.governanceAlerts.length} messages in topic`);
-            
-            // Just check timestamps - don't parse content
-            for (const alert of jsonResponse.governanceAlerts) {
-              if (alert.alertData && alert.alertData.effectiveTimestamp) {
-                const alertTime = new Date(alert.alertData.effectiveTimestamp);
-                const ageInMinutes = (currentTime.getTime() - alertTime.getTime()) / (1000 * 60);
-                
-                if (ageInMinutes <= MAX_AGE_MINUTES) {
-                  console.log(`✅ Found recent alert from ${alert.alertData.effectiveTimestamp} (${ageInMinutes.toFixed(1)} minutes old)`);
-                  hasRecentAlert = true;
-                  break;
-                } else {
-                  console.log(`⏭️  Skipping old alert from ${alert.alertData.effectiveTimestamp} (${ageInMinutes.toFixed(1)} minutes old)`);
-                }
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.log("⚠️  Could not parse topic messages, assuming no recent alerts");
-      }
-
-      // If we found any recent alert, execute full rebalancing
       if (hasRecentAlert) {
         console.log("🚨 Recent alert detected - executing full rebalancing...");
         await this.executeRebalancing();
