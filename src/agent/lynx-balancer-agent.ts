@@ -8,10 +8,7 @@ import { HederaLangchainToolkit, AgentMode, coreHTSPlugin, coreAccountPlugin, co
 import { TokenTransferTool } from '../tools/token-transfer-tool.js';
 import { HbarWithdrawalTool } from '../tools/hbar-withdrawal-tool.js';
 import { TokenWithdrawalTool } from '../tools/token-withdrawal-tool.js';
-
 import { ContractRatioTool, TokenSupplyTool } from '../tools/contract-ratio-tool.js';
-
-// No plugin needed - let the agent use existing tools directly!
 
 // Load environment variables
 config();
@@ -62,9 +59,6 @@ export class LynxBalancerAgent {
     }
   };
 
-  // Contract divisor (currently hardcoded to 10, will be DAO parameter in future)
-  private readonly CONTRACT_DIVISOR = 10;
-
   // Blockchain tools
   private hederaAgentToolkit?: HederaLangchainToolkit;
   private agentExecutor?: AgentExecutor;
@@ -73,9 +67,6 @@ export class LynxBalancerAgent {
   constructor() {
     this.env = process.env as NodeJS.ProcessEnv & EnvironmentConfig;
   }
-
-
-
 
 
   /**
@@ -91,7 +82,7 @@ export class LynxBalancerAgent {
 
   /**
    * Validate that treasury balances match the contract's expected ratios
-   * Pure agent approach - no parsing, no plugins, just agent intelligence!
+   * Explicit step-by-step approach with specific tool calls
    */
   private async validateTreasuryRatios(): Promise<void> {
     if (!this.agentExecutor) {
@@ -99,56 +90,64 @@ export class LynxBalancerAgent {
     }
 
     try {
-      console.log("🔍 Validating treasury ratios using pure agent approach...");
+      console.log("🔍 Starting explicit treasury validation process...");
       
-      // Let the agent handle EVERYTHING with detailed reporting at each step
-      const rebalancingResponse = await this.agentExecutor.invoke({
-        input: `I need you to rebalance the treasury portfolio with detailed reporting. Please do the following step by step:
-
-**STEP 1: GET CONTRACT RATIOS**
-Use the contract_ratio_query tool to get current ratios from governance contract ${this.env.GOVERNANCE_CONTRACT_ID}
-Show me the exact ratios you received.
-
-**STEP 2: GET LYNX TOTAL SUPPLY** 
-Use the token_supply_query tool to get total supply of LYNX token ${this.env.CONTRACT_LYNX_TOKEN}
-Show me the exact supply number you received.
-
-**STEP 3: GET CURRENT HBAR BALANCE**
-Use the get_hbar_balance_query tool to get current HBAR balance for contract ${this.env.GOVERNANCE_CONTRACT_ID}
-Show me the current HBAR balance.
-
-**STEP 4: GET CURRENT TOKEN BALANCES**
-Use the get_account_token_balances_query tool to get current token balances for contract ${this.env.GOVERNANCE_CONTRACT_ID}
-Show me all current token balances.
-
-**STEP 5: CALCULATE REQUIRED BALANCES**
-For each token in the ratios, calculate required balances using: Required = (LYNX Supply × Ratio) ÷ 10
-Show me the calculation for each token like this:
-- HBAR: Required = (38 × 40) ÷ 10 = 152 HBAR | Current = XXX HBAR | Difference = XXX
-- SAUCE: Required = (38 × 25) ÷ 10 = 95 tokens | Current = XXX tokens | Difference = XXX
-(etc for each token)
-
-**STEP 6: CHECK TOLERANCE**
-For each token, check if the difference is within 5% tolerance.
-Show me which tokens are OUT OF BALANCE.
-
-**STEP 7: EXECUTE TRANSFERS**
-For any tokens outside tolerance, execute the transfers:
-- Use transfer_hbar tool to send HBAR TO the contract (if need more HBAR)
-- Use token_transfer_tool to send tokens TO the contract (if need more tokens)  
-- Use hbar_withdrawal_tool to withdraw HBAR FROM contract (if have too much HBAR)
-- Use token_withdrawal_tool to withdraw tokens FROM contract (if have too much tokens)
-
-**STEP 8: VERIFY FINAL BALANCES**
-After all transfers, check balances again to confirm they're now within tolerance.
-
-Skip the LYNX token itself since it's the governance token.
-
-Please report each step clearly so I can verify your calculations!`
+      // STEP 1: Get Contract Ratios (1 specific call)
+      console.log("📊 Step 1: Getting contract ratios...");
+      const ratiosResponse = await this.agentExecutor.invoke({
+        input: `Use the contract_ratio_query tool to get current ratios from governance contract ${this.env.GOVERNANCE_CONTRACT_ID}. Report the exact ratios you received.`
       });
+      console.log("📄 Ratios:", ratiosResponse.output);
 
-      console.log("📄 Agent Response:", rebalancingResponse.output);
-      console.log("✅ Agent completed treasury rebalancing");
+      // STEP 2: Get LYNX Total Supply (1 specific call)
+      console.log("🔢 Step 2: Getting LYNX total supply...");
+      const supplyResponse = await this.agentExecutor.invoke({
+        input: `Use the token_supply_query tool to get total supply of LYNX token ${this.env.CONTRACT_LYNX_TOKEN}. Report the exact supply number.`
+      });
+      console.log("📄 Supply:", supplyResponse.output);
+
+      // STEP 3: Get HBAR Balance (1 specific call)
+      console.log("💰 Step 3: Getting HBAR balance...");
+      const hbarResponse = await this.agentExecutor.invoke({
+        input: `Use the get_hbar_balance_query tool to get current HBAR balance for contract ${this.env.GOVERNANCE_CONTRACT_ID}. Report the current HBAR balance.`
+      });
+      console.log("📄 HBAR Balance:", hbarResponse.output);
+
+      // STEP 4: Get Token Balances (1 specific call)
+      console.log("🪙 Step 4: Getting token balances...");
+      const balancesResponse = await this.agentExecutor.invoke({
+        input: `Use the get_account_token_balances_query tool to get current token balances for contract ${this.env.GOVERNANCE_CONTRACT_ID}. Report all current token balances.`
+      });
+      console.log("📄 Token Balances:", balancesResponse.output);
+
+      // STEP 5: Calculate & Analyze (1 specific call)
+      console.log("🧮 Step 5: Analyzing balance requirements...");
+      const analysisResponse = await this.agentExecutor.invoke({
+        input: `Based on the data collected above, calculate required balances using: Required = (LYNX Supply × Ratio) ÷ 10
+
+Compare current vs required for each token and check if any are >5% out of balance.
+Report: "REBALANCE NEEDED: [token names]" or "ALL BALANCED"
+Skip the LYNX token itself since it's the governance token.`
+      });
+      console.log("📄 Analysis:", analysisResponse.output);
+
+            // STEP 6: Conditional Execution (0-1 specific calls)
+      if (analysisResponse.output.includes("REBALANCE NEEDED")) {
+        console.log("⚖️  Step 6: Executing ALL required transfers...");
+        const transferResponse = await this.agentExecutor.invoke({
+          input: `Execute transfers for ALL imbalanced tokens you identified. Use the appropriate tools:
+- transfer_hbar tool to send HBAR TO the contract (if need more HBAR)
+- token_transfer_tool to send tokens TO the contract (if need more tokens)  
+- hbar_withdrawal_tool to withdraw HBAR FROM contract (if have too much HBAR)
+- token_withdrawal_tool to withdraw tokens FROM contract (if have too much tokens)
+
+Execute ALL necessary transfers to bring every out-of-balance token back within the 5% tolerance range.`
+        });
+        console.log("📄 Transfer Result:", transferResponse.output);
+        console.log("✅ All rebalancing transfers completed");
+      } else {
+        console.log("✅ All balances are within tolerance - no transfers needed");
+      }
 
     } catch (error) {
       console.error("❌ Failed to validate treasury ratios:", error);
