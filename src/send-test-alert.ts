@@ -8,42 +8,18 @@ import { ChatOpenAI } from '@langchain/openai';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { AgentExecutor, createToolCallingAgent } from 'langchain/agents';
 import { Client } from '@hashgraph/sdk';
-import { HederaLangchainToolkit } from 'hedera-agent-kit';
+import { HederaLangchainToolkit, coreConsensusPlugin } from 'hedera-agent-kit';
 
 // Load environment variables
 config();
 
-/**
- * Governance Agent Balance Alert Message Schema
- */
-interface BalanceAlertMessage {
-  p: 'hcs-10';                    // Protocol identifier
-  op: 'balance_alert';            // Operation type
-  operator_id: string;            // Format: "{governance_topic}@{agent_account}"
-  m: string;                      // Human-readable message
-  
-  // Alert Data
-  data: {
-    type: 'GOVERNANCE_RATIO_UPDATE';
-    alertLevel: 'HIGH' | 'NORMAL';
-    weights: Record<string, number>;  // Weight multipliers by token name
-    changedToken: string;         // Name of the token that changed
-    changedValue: {
-      old: number;
-      new: number;
-    };
-    changeMagnitude: number;       // Absolute difference between old/new
-    effectiveTimestamp: string;    // ISO timestamp
-    transactionId: string;         // Contract update transaction ID
-    reason: string;                // "Governance vote executed - contract ratios updated"
-    requiresImmediateRebalance: boolean;  // true if change > 5%
-  };
-}
+// Simple alert messages - content doesn't matter, only that a message is received
 
 /**
  * Simple Alert Sender
  * 
- * This script ONLY sends HCS-10 alerts to the balancer agent
+ * Sends simple test messages to trigger balancer agent rebalancing.
+ * Content doesn't matter - any message triggers rebalancing.
  */
 class SimpleAlertSender {
   private agentExecutor?: AgentExecutor;
@@ -78,10 +54,12 @@ class SimpleAlertSender {
       this.client = Client.forTestnet();
       this.client.setOperator(env.HEDERA_ACCOUNT_ID!, env.HEDERA_PRIVATE_KEY!);
 
-      // Initialize Hedera Agent Kit
+      // Initialize Hedera Agent Kit with consensus plugin
       const hederaAgentToolkit = new HederaLangchainToolkit({
         client: this.client,
-        configuration: {}
+        configuration: {
+          plugins: [coreConsensusPlugin]
+        }
       });
 
       // Initialize OpenAI LLM
@@ -93,7 +71,7 @@ class SimpleAlertSender {
 
       // Create simple prompt for topic messaging
       const prompt = ChatPromptTemplate.fromMessages([
-        ['system', 'You are a governance agent that sends balancing alerts via HCS topics. Use the topic messaging tools to send structured alerts.'],
+        ['system', 'You are a simple alert sender. Use the topic messaging tools to submit messages to HCS topics. Always use the submit-message-to-topic tool when asked to submit a message.'],
         ['placeholder', '{chat_history}'],
         ['human', '{input}'],
         ['placeholder', '{agent_scratchpad}'],
@@ -156,121 +134,39 @@ class SimpleAlertSender {
   }
 
   /**
-   * Send a test balance alert to the balancer agent topic using HCS-10 protocol
+   * Send a simple test alert to trigger rebalancing
    */
   async sendAlert(alertType: string): Promise<void> {
     if (!this.agentExecutor || !this.topicId) {
       throw new Error("Agent executor or topic ID not initialized");
     }
 
-    const env = process.env;
-    const operatorId = `${env.BALANCER_INBOUND_TOPIC_ID || '0.0.123456'}@${env.HEDERA_ACCOUNT_ID}`;
-
-    const alerts: Record<string, BalanceAlertMessage> = {
-              hbar: {
-          p: 'hcs-10',
-          op: 'balance_alert',
-          operator_id: operatorId,
-          m: 'Balance Alert: HBAR weight changed from 50 to 40 (10 weight change)',
-          data: {
-            type: 'GOVERNANCE_RATIO_UPDATE',
-            alertLevel: 'HIGH',
-            weights: {
-              HBAR: 40,
-              WBTC: 4,
-              SAUCE: 30,
-              USDC: 30,
-              JAM: 30,
-              HEADSTART: 20
-            },
-            changedToken: 'HBAR',
-            changedValue: {
-              old: 50,
-              new: 40
-            },
-            changeMagnitude: 10,
-            effectiveTimestamp: new Date().toISOString(),
-            transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
-            reason: 'Governance vote executed - contract ratios updated',
-            requiresImmediateRebalance: true
-          }
-        },
-              sauce: {
-          p: 'hcs-10',
-          op: 'balance_alert',
-          operator_id: operatorId,
-          m: 'Balance Alert: SAUCE weight changed from 25 to 30 (5 weight change)',
-          data: {
-            type: 'GOVERNANCE_RATIO_UPDATE',
-            alertLevel: 'NORMAL',
-            weights: {
-              HBAR: 50,
-              WBTC: 4,
-              SAUCE: 30,
-              USDC: 30,
-              JAM: 30,
-              HEADSTART: 20
-            },
-            changedToken: 'SAUCE',
-            changedValue: {
-              old: 25,
-              new: 30
-            },
-            changeMagnitude: 5,
-            effectiveTimestamp: new Date().toISOString(),
-            transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
-            reason: 'Governance vote executed - contract ratios updated',
-            requiresImmediateRebalance: false
-          }
-        },
-              usdc: {
-          p: 'hcs-10',
-          op: 'balance_alert',
-          operator_id: operatorId,
-          m: 'Balance Alert: USDC weight changed from 15 to 20 (5 weight change)',
-          data: {
-            type: 'GOVERNANCE_RATIO_UPDATE',
-            alertLevel: 'NORMAL',
-            weights: {
-              HBAR: 50,
-              WBTC: 4,
-              SAUCE: 30,
-              USDC: 20,
-              JAM: 30,
-              HEADSTART: 20
-            },
-            changedToken: 'USDC',
-            changedValue: {
-              old: 15,
-              new: 20
-            },
-            changeMagnitude: 5,
-            effectiveTimestamp: new Date().toISOString(),
-            transactionId: `${env.HEDERA_ACCOUNT_ID}@${Date.now()}.${Math.floor(Math.random() * 1000000)}`,
-            reason: 'Governance vote executed - contract ratios updated',
-            requiresImmediateRebalance: false
-          }
-        }
+    // Simple messages - content doesn't matter, only that a message is received
+    const alerts: Record<string, string> = {
+      hbar: "GOVERNANCE UPDATE: HBAR ratio changed - rebalancing required",
+      sauce: "GOVERNANCE UPDATE: SAUCE ratio changed - rebalancing required", 
+      usdc: "GOVERNANCE UPDATE: USDC ratio changed - rebalancing required",
+      test: "TEST ALERT: Triggering rebalancing cycle"
     };
 
-    const alertData = alerts[alertType];
-    if (!alertData) {
-      throw new Error(`Unknown alert type: ${alertType}`);
+    const message = alerts[alertType];
+    if (!message) {
+      throw new Error(`Unknown alert type: ${alertType}. Available: ${Object.keys(alerts).join(', ')}`);
     }
 
-    console.log(`🚨 Sending ${alertType.toUpperCase()} balance alert to topic...`);
-    console.log(`📊 Alert data:`, JSON.stringify(alertData, null, 2));
+    console.log(`🚨 Sending ${alertType.toUpperCase()} alert to topic ${this.topicId}...`);
+    console.log(`📨 Message: "${message}"`);
     
     try {
       const response = await this.agentExecutor.invoke({
-        input: `Submit a message to topic ${this.topicId} with this JSON content: ${JSON.stringify(alertData)}`
+        input: `Submit the message "${message}" to topic ${this.topicId}`
       });
       
-      console.log("✅ Balance alert sent successfully");
+      console.log("✅ Alert sent successfully!");
       console.log(`📤 Response: ${response.output}`);
       
     } catch (error) {
-      console.error(`❌ Failed to send ${alertType} balance alert:`, error);
+      console.error(`❌ Failed to send ${alertType} alert:`, error);
       throw error;
     }
   }
@@ -280,11 +176,11 @@ class SimpleAlertSender {
  * Main function
  */
 async function main(): Promise<void> {
-  console.log("🦌⚡ Balance Alert Sender Test");
-  console.log("=============================");
+  console.log("🦌⚡ Simple Alert Sender");
+  console.log("=======================");
 
   const args = process.argv.slice(2);
-  const command = args[0] || 'hbar';
+  const command = args[0] || 'test';
 
   const sender = new SimpleAlertSender();
 
@@ -301,26 +197,28 @@ async function main(): Promise<void> {
       case 'usdc':
         await sender.sendAlert('usdc');
         break;
+      case 'test':
+        await sender.sendAlert('test');
+        break;
       default:
-        console.log("📋 Available balance alert commands:");
-        console.log("  hbar    - Send HBAR weight change alert (50 → 40, 10 weight change)");
-        console.log("  sauce   - Send SAUCE weight change alert (25 → 30, 5 weight change)");
-        console.log("  usdc    - Send USDC weight change alert (15 → 20, 5 weight change)");
+        console.log("📋 Available alert commands:");
+        console.log("  test    - Send simple test alert to trigger rebalancing");
+        console.log("  hbar    - Send HBAR governance update alert");
+        console.log("  sauce   - Send SAUCE governance update alert");
+        console.log("  usdc    - Send USDC governance update alert");
         console.log("\n💡 Examples:");
+        console.log("   npm run test:alert test");
         console.log("   npm run test:alert hbar");
         console.log("   npm run test:alert sauce");
-        console.log("   npm run test:alert usdc");
-        console.log("\n📊 These alerts use the HCS-10 protocol with:");
-        console.log("   - Token weight multipliers for governance updates");
-        console.log("   - Alert levels (HIGH/NORMAL) based on change magnitude");
-        console.log("   - Complete weight state for all tokens");
-        console.log("   - Transaction IDs and timestamps");
-        console.log("   - Immediate rebalance flags for significant changes");
+        console.log("\n📊 Note: The balancer agent now triggers rebalancing on ANY message");
+        console.log("   - Message content doesn't matter");
+        console.log("   - Agent uses real-time topic subscription");
+        console.log("   - Any message will trigger immediate rebalancing");
         break;
     }
 
   } catch (error) {
-    console.error("❌ Failed to send balance alert:", error);
+    console.error("❌ Failed to send alert:", error);
     process.exit(1);
   }
 }
