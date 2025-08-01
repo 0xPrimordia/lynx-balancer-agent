@@ -36,14 +36,12 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@hashgraph/sdk": "^2.54.0",
-    "@hashgraphonline/conversational-agent": "^0.1.1",
-    "@hashgraphonline/standards-sdk": "^0.0.155",
-    "@langchain/core": "^0.3.24",
-    "@langchain/openai": "^0.3.14",
-    "dotenv": "^16.4.5",
-    "hedera-agent-kit": "^3.0.4",
-    "langchain": "^0.3.8"
+    "@hashgraph/sdk": "^2.69.0",
+    "@langchain/core": "^0.3.66",
+    "@langchain/openai": "^0.3.17",
+    "dotenv": "^16.6.1",
+    "hedera-agent-kit": "^3.0.7",
+    "langchain": "^0.3.30"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -27,44 +27,76 @@ class TokenTransferTool extends StructuredTool {
       console.log(`📤 From: ${fromAccountId}`);
       console.log(`📥 To: ${toAccountId}`);
 
-      // Get token info to determine decimals
-      const tokenInfoQuery = new TokenInfoQuery()
-        .setTokenId(TokenId.fromString(tokenId));
-      
-      const tokenInfo = await tokenInfoQuery.execute(this.client);
-      const decimals = tokenInfo.decimals;
-      
-      console.log(`🔍 Token ${tokenId} has ${decimals} decimals`);
+      // Handle HBAR vs Token transfers differently
+      if (tokenId === 'HBAR') {
+        console.log(`🔍 HBAR transfer - using native currency handling`);
+        
+        // Convert HBAR to tinybars
+        const humanAmount = parseFloat(amount);
+        const tinybars = Math.round(humanAmount * 100000000); // 1 HBAR = 100,000,000 tinybars
+        
+        console.log(`🔄 Converting ${humanAmount} HBAR to ${tinybars} tinybars`);
 
-      // Convert human-readable amount to smallest units
-      const humanAmount = parseFloat(amount);
-      const smallestUnits = Math.round(humanAmount * Math.pow(10, decimals));
-      
-      console.log(`🔄 Converting ${humanAmount} to ${smallestUnits} smallest units`);
+        // Create HBAR transfer transaction
+        const transferTx = new TransferTransaction()
+          .addHbarTransfer(AccountId.fromString(fromAccountId), Hbar.fromTinybars(-tinybars))
+          .addHbarTransfer(AccountId.fromString(toAccountId), Hbar.fromTinybars(tinybars))
+          .setMaxTransactionFee(Hbar.fromTinybars(100000000)); // 1 HBAR max fee
 
-      // Create the transfer transaction
-      const transferTx = new TransferTransaction()
-        .addTokenTransfer(
-          TokenId.fromString(tokenId),
-          AccountId.fromString(fromAccountId),
-          -smallestUnits
-        )
-        .addTokenTransfer(
-          TokenId.fromString(tokenId),
-          AccountId.fromString(toAccountId),
-          smallestUnits
-        )
-        .setMaxTransactionFee(Hbar.fromTinybars(100000000)); // 1 HBAR max fee
+        // Execute the transaction
+        const txResponse = await transferTx.execute(this.client);
+        console.log(`⏳ Transaction submitted: ${txResponse.transactionId}`);
 
-      // Execute the transaction
-      const txResponse = await transferTx.execute(this.client);
-      console.log(`⏳ Transaction submitted: ${txResponse.transactionId}`);
+        // Get the receipt
+        const receipt = await txResponse.getReceipt(this.client);
+        console.log(`✅ Transaction completed with status: ${receipt.status}`);
 
-      // Get the receipt
-      const receipt = await txResponse.getReceipt(this.client);
-      console.log(`✅ Transaction completed with status: ${receipt.status}`);
+        return `The transfer of ${humanAmount} HBAR from account ${fromAccountId} to contract ${toAccountId} was successful. The transaction ID is **${txResponse.transactionId}**.`;
+      } else {
+        // Handle token transfers
+        console.log(`🔍 Token transfer for ${tokenId}`);
+        
+        // Get token info to determine decimals
+        const tokenInfoQuery = new TokenInfoQuery()
+          .setTokenId(TokenId.fromString(tokenId));
+        
+        const tokenInfo = await tokenInfoQuery.execute(this.client);
+        const decimals = tokenInfo.decimals;
+        
+        console.log(`🔍 Token ${tokenId} has ${decimals} decimals`);
 
-      return `The transfer of ${humanAmount} units of token ${tokenId} from account ${fromAccountId} to contract ${toAccountId} was successful. The transaction ID is ${txResponse.transactionId}.`;
+        // Convert human-readable amount to smallest units
+        const humanAmount = parseFloat(amount);
+        const smallestUnits = Math.round(humanAmount * Math.pow(10, decimals));
+        
+        console.log(`🔄 Converting ${humanAmount} to ${smallestUnits} smallest units`);
+
+        // Create the transfer transaction
+        const transferTx = new TransferTransaction()
+          .addTokenTransfer(
+            TokenId.fromString(tokenId),
+            AccountId.fromString(fromAccountId),
+            -smallestUnits
+          )
+          .addTokenTransfer(
+            TokenId.fromString(tokenId),
+            AccountId.fromString(toAccountId),
+            smallestUnits
+          )
+          .setMaxTransactionFee(Hbar.fromTinybars(100000000)); // 1 HBAR max fee
+
+        // Execute the transaction
+        const txResponse = await transferTx.execute(this.client);
+        console.log(`⏳ Transaction submitted: ${txResponse.transactionId}`);
+
+        // Get the receipt
+        const receipt = await txResponse.getReceipt(this.client);
+        console.log(`✅ Transaction completed with status: ${receipt.status}`);
+
+        return `The transfer of ${humanAmount} units of token ${tokenId} from account ${fromAccountId} to contract ${toAccountId} was successful.`;
+      }
+
+
 
     } catch (error) {
       console.error('❌ Token transfer failed:', error);

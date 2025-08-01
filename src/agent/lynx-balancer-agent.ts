@@ -1,11 +1,10 @@
 import { config } from 'dotenv';
-import { AgentMessaging } from './agent-messaging.js';
 import { EnvironmentConfig } from './agent-config.js';
 import { ChatOpenAI } from '@langchain/openai';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { AgentExecutor, createToolCallingAgent } from 'langchain/agents';
-import { Client } from '@hashgraph/sdk';
-import { HederaLangchainToolkit } from 'hedera-agent-kit';
+import { Client, TopicMessageQuery, Timestamp } from '@hashgraph/sdk';
+import { HederaLangchainToolkit, AgentMode, coreHTSPlugin, coreAccountPlugin, coreConsensusPlugin, coreQueriesPlugin } from 'hedera-agent-kit';
 import { TokenTransferTool } from '../tools/token-transfer-tool.js';
 import { HbarWithdrawalTool } from '../tools/hbar-withdrawal-tool.js';
 import { TokenWithdrawalTool } from '../tools/token-withdrawal-tool.js';
@@ -24,7 +23,6 @@ config();
  * 3. Reports status back to governance agent
  */
 export class LynxBalancerAgent {
-  private agentMessaging: AgentMessaging;
   private env: EnvironmentConfig;
   private isRunning: boolean = false;
   
@@ -80,7 +78,6 @@ export class LynxBalancerAgent {
 
   constructor() {
     this.env = process.env as NodeJS.ProcessEnv & EnvironmentConfig;
-    this.agentMessaging = new AgentMessaging(this.env);
   }
 
   /**
@@ -154,7 +151,9 @@ export class LynxBalancerAgent {
    */
   async executeRebalancing(): Promise<void> {
     console.log("⚖️  Executing portfolio rebalancing...");
+    console.log("🔄 Starting treasury ratio validation...");
     await this.validateTreasuryRatios();
+    console.log("✅ Treasury ratio validation completed");
   }
 
   /**
@@ -358,10 +357,16 @@ HEADSTART: 3
       this.client = Client.forTestnet();
       this.client.setOperator(this.env.HEDERA_ACCOUNT_ID!, this.env.HEDERA_PRIVATE_KEY!);
 
-      // Initialize V3 Hedera Agent Kit (following tool-calling-balance-check pattern)
+      // Initialize V3 Hedera Agent Kit with plugins
       this.hederaAgentToolkit = new HederaLangchainToolkit({
         client: this.client,
-        configuration: {}
+        configuration: {
+          tools: [], // empty array loads all tools
+          context: {
+            mode: AgentMode.AUTONOMOUS,
+          },
+          plugins: [coreHTSPlugin, coreAccountPlugin, coreConsensusPlugin, coreQueriesPlugin],
+        }
       });
 
       // Initialize OpenAI LLM (following tool-calling-balance-check pattern)
@@ -419,7 +424,6 @@ HEADSTART: 3
       console.log("✅ Blockchain tools initialized");
       console.log(`📋 Operator Account: ${this.env.HEDERA_ACCOUNT_ID}`);
       console.log(`🏛️  Governance Contract: ${this.env.GOVERNANCE_CONTRACT_ID}`);
-      console.log(`🔧 Loaded ${hederaTools.length + 5} tools (${hederaTools.length} Hedera + 5 custom)`);
 
     } catch (error) {
       console.error("❌ Failed to initialize blockchain tools:", error);
@@ -491,7 +495,6 @@ HEADSTART: 3
     const finalTopicId = this.env.BALANCER_ALERT_TOPIC_ID!;
     console.log("📡 Starting topic monitoring...");
     console.log(`🎯 Monitoring topic: ${finalTopicId}`);
-    console.log("🔄 Processing all pending alerts on startup...");
 
     try {
       // Initialize contract balances on startup
@@ -501,51 +504,80 @@ HEADSTART: 3
       // Execute initial rebalancing on startup
       await this.executeRebalancing();
 
-      // Check for recent messages using the built-in tool
-      const response = await this.agentExecutor.invoke({
-        input: `Use the get-topic-messages-query tool to check topic ${this.env.BALANCER_ALERT_TOPIC_ID}. Tell me if there are any messages from the last 5 minutes. Just answer YES or NO with the count of recent messages.`
-      });
+      // Subscribe to topic messages using TopicMessageQuery
+      const subscriptionStartTime = new Date();
+      console.log("🔄 Starting real-time topic subscription...");
+      console.log(`⏰ Subscription start time: ${subscriptionStartTime.toISOString()}`);
+      console.log("📝 Only new messages from this point forward will be processed");
+      
+      new TopicMessageQuery()
+        .setTopicId(finalTopicId)
+        .setStartTime(Timestamp.fromDate(subscriptionStartTime))
+        .subscribe(
+          this.client!,
+          (message, error) => {
+            if (error) {
+              console.error("❌ Topic subscription error:", error);
+              return;
+            }
+          },
+          async (message) => {
+            if (!this.isRunning || !message) return; // Skip processing if agent is stopped or message is null
+            
+            try {
+              console.log("🚨 New topic message received!");
+              console.log(`📨 Message: ${Buffer.from(message.contents).toString("utf8")}`);
+              console.log(`🕒 Timestamp: ${new Date(message.consensusTimestamp.toDate())}`);
+              
+              // Process the alert message
+              await this.processTopicAlert(message);
+              
+            } catch (error) {
+              console.error("❌ Error processing topic message:", error);
+            }
+          }
+        );
 
-      console.log("🔍 Processing topic messages...");
-
-      // Process all alert messages
-      await this.processAllAlerts(response.output);
+      console.log("✅ Topic subscription active - waiting for messages...");
+      console.log("💡 The agent will now process alerts in real-time as they arrive");
 
     } catch (error) {
-      console.error("❌ Error processing alerts:", error);
+      console.error("❌ Error setting up topic monitoring:", error);
+      throw error;
     }
-
-    console.log("✅ Alert processing completed. Agent will now wait for manual restart to process new alerts.");
-    console.log("💡 To process new alerts, restart the agent after sending new alert messages.");
   }
 
   /**
-   * Check for recent alerts and trigger rebalancing if found
-   * Simplified: Just check if the agent found any recent messages
+   * Process a single topic alert message
    */
-  private async processAllAlerts(messagesOutput: string): Promise<void> {
+  private async processTopicAlert(message: { contents: any; consensusTimestamp: any }): Promise<void> {
+    if (!this.agentExecutor) {
+      throw new Error("Agent executor not initialized");
+    }
+
     try {
-      console.log("🔍 Checking agent response for recent alerts...");
-      console.log(`📋 Agent response: ${messagesOutput}`);
+      const messageContent = Buffer.from(message.contents).toString("utf8");
+      console.log("🔍 Processing topic alert...");
+      console.log(`📋 Message content: ${messageContent}`);
 
-      // Simple check: look for YES in the response
-      const hasRecentAlert = messagesOutput.toLowerCase().includes('yes');
+      // Refresh contract balances before rebalancing
+      console.log("📊 Refreshing contract balances before rebalancing...");
+      await this.refreshContractBalances();
 
-      if (hasRecentAlert) {
-        console.log("🚨 Recent alert detected - executing full rebalancing...");
+      // Execute rebalancing in response to the alert
+      console.log("🚨 Alert detected - executing rebalancing...");
+      try {
         await this.executeRebalancing();
-        console.log("✅ Rebalancing completed in response to alert");
-      } else {
-        console.log("⏭️  No recent alerts found - no rebalancing needed");
+        console.log("✅ Rebalancing completed in response to topic alert");
+      } catch (rebalanceError) {
+        console.error("❌ Error during rebalancing:", rebalanceError);
+        throw rebalanceError;
       }
 
-      console.log("✅ Alert check completed");
-
     } catch (error) {
-      console.error("❌ Error checking alerts:", error);
+      console.error("❌ Error processing topic alert:", error);
     }
   }
-
 
 
   /**
