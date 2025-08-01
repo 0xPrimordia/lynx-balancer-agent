@@ -1,19 +1,97 @@
 # 🦌⚡ Lynx Balancer Agent
 
-Hedera-powered AI agent using HCS and the **V3 Hedera Agent Kit** with LangChain agents for automated treasury balancing through agent-to-agent communication.
+**Pure Agent-Driven Treasury Rebalancing** - An intelligent AI agent that autonomously manages tokenized index fund treasuries using Hedera blockchain tools with complete transparency and step-by-step decision-making.
 
 ## 🎯 Overview
 
-The Lynx Balancer Agent is designed to work in coordination with a Governance Agent to automatically rebalance tokenized index treasuries. It demonstrates advanced **agent-to-agent communication** using the HCS-10 protocol and executes portfolio rebalancing based on governance parameter updates.
+The Lynx Balancer Agent takes a **pure agentic approach** to treasury management - no complex parsing, no rigid JSON structures, just intelligent reasoning. The agent fetches real blockchain data, performs calculations transparently, and executes rebalancing operations with full visibility into its decision-making process.
+
+### 🚀 **Pure Agent Approach - What Makes This Special**
+
+Instead of traditional rule-based systems, this agent:
+- **🧠 Reasons through problems** like a human treasury manager
+- **📊 Shows its work step-by-step** with detailed calculations  
+- **🔍 Fetches real-time data** directly from blockchain tools
+- **⚖️ Makes intelligent decisions** based on current vs target ratios
+- **💬 Explains everything** in plain English with full transparency
 
 ### Key Features
 
-- ✅ **V3 Hedera Agent Kit**: Modern LangChain-based agent architecture
-- ✅ **HCS-10 Agent Communication**: Secure, connection-based messaging with governance agents
-- ✅ **Automated Rebalancing**: Responds to governance ratio updates with portfolio adjustments
-- ✅ **Multi-Agent Coordination**: Works seamlessly with existing governance agent systems
-- ✅ **Real-time Status Reporting**: Provides progress updates during rebalancing operations
-- ✅ **Security & Access Control**: Built-in permission management and fee barriers
+- ✅ **Transparent Calculations**: See every step of the agent's math and reasoning
+- ✅ **Pure Agent Intelligence**: No parsing or rigid structures - agent handles everything
+- ✅ **Real-time Data**: Fetches live contract ratios and token supplies from blockchain
+- ✅ **Cost-Efficient**: Uses GPT-4o-mini for production-ready economics  
+- ✅ **Step-by-Step Reporting**: Complete visibility into balance checks and transfers
+- ✅ **HCS Topic Monitoring**: Responds to governance alerts automatically
+- ✅ **Direct Tool Calling**: Agent calls Hedera tools directly for maximum flexibility
+
+## 📋 **Agent Output Example**
+
+See exactly how the agent thinks and works:
+
+```
+### STEP 1: GET CONTRACT RATIOS
+The current ratios from the governance contract (0.0.6434231) are:
+- HBAR: 40
+- WBTC: 3  
+- SAUCE: 25
+- USDC: 24
+- JAM: 5
+- HEADSTART: 3
+
+### STEP 2: GET LYNX TOTAL SUPPLY
+The total supply of the LYNX token (0.0.6200902) is 38.
+
+### STEP 3: GET CURRENT HBAR BALANCE
+The current HBAR balance for the contract (0.0.6434231) is 152 HBAR.
+
+### STEP 4: GET CURRENT TOKEN BALANCES
+The current token balances for the contract (0.0.6434231) are:
+- SAUCE (0.0.1183558): 11.4 tokens
+- WBTC (0.0.6212932): 19 tokens
+- USDC (0.0.6212931): 91.2 tokens
+- JAM (0.0.6212932): 9.12 tokens
+- HEADSTART (0.0.6212933): 11.4 tokens
+
+### STEP 5: CALCULATE REQUIRED BALANCES  
+Using the formula: Required = (LYNX Supply × Ratio) ÷ 10
+- **HBAR**: Required = (38 × 40) ÷ 10 = 152 HBAR | Current = 152 HBAR | Difference = 0
+- **WBTC**: Required = (38 × 3) ÷ 10 = 11.4 tokens | Current = 19 tokens | Difference = 7.6
+- **SAUCE**: Required = (38 × 25) ÷ 10 = 95 tokens | Current = 11.4 tokens | Difference = 83.6
+- **USDC**: Required = (38 × 24) ÷ 10 = 91.2 tokens | Current = 91.2 tokens | Difference = 0
+- **JAM**: Required = (38 × 5) ÷ 10 = 19 tokens | Current = 9.12 tokens | Difference = 9.88
+- **HEADSTART**: Required = (38 × 3) ÷ 10 = 11.4 tokens | Current = 11.4 tokens | Difference = 0
+
+### STEP 6: CHECK TOLERANCE
+Tokens OUT OF BALANCE (more than 5% difference):
+- **WBTC**: Difference = 7.6 (out of balance)
+- **SAUCE**: Difference = 83.6 (out of balance)  
+- **JAM**: Difference = 9.88 (out of balance)
+
+### STEP 7: EXECUTE TRANSFERS
+Transfers executed:
+- Transferred 83.6 SAUCE to the contract
+- Transferred 9.88 JAM to the contract  
+- Withdrew 7.6 WBTC from the contract
+
+### STEP 8: VERIFY FINAL BALANCES
+All tokens are now within the 5% tolerance. The treasury portfolio is successfully rebalanced.
+```
+
+**🎯 Complete Transparency**: Every calculation, every decision, every action is explained in detail.
+
+## 🤔 **Pure Agent vs Traditional Approach**
+
+| **Traditional Treasury Systems** | **Our Pure Agent Approach** |
+|--------------------------------|----------------------------|
+| ❌ Complex parsing and JSON structures | ✅ Natural language reasoning |
+| ❌ Rigid rule-based logic | ✅ Intelligent decision-making |
+| ❌ Hidden calculations | ✅ Complete transparency - shows all work |
+| ❌ Black box operations | ✅ Step-by-step explanations |
+| ❌ Hard to debug/audit | ✅ Full audit trail in plain English |
+| ❌ Brittle when things change | ✅ Adapts to new situations intelligently |
+
+**🧠 How It Works**: Instead of writing complex parsing logic, we give the agent clear instructions and let it reason through the problem like a human treasury manager would. It fetches data, does math, explains its reasoning, and executes transfers - all while showing its work.
 
 ## 🚀 Quick Start
 
@@ -124,7 +202,41 @@ const status = {
 
 ## 🛠️ Usage
 
-### ⚠️ **IMPORTANT: Correct Workflow for Agent-to-Agent Communication**
+### 🎯 **Basic Treasury Rebalancing**
+
+Start the agent for automatic treasury management:
+
+```bash
+# Build and start the agent
+npm run build
+npm start
+
+# Or use development mode
+npm run dev
+```
+
+The agent will:
+1. **Fetch live data** from your governance contract and token supplies
+2. **Calculate required balances** using the formula: `Required = (LYNX Supply × Ratio) ÷ 10`
+3. **Check 5% tolerance** for each token 
+4. **Execute transfers** automatically for out-of-balance tokens
+5. **Report everything** with complete transparency
+
+**💰 Cost Efficient**: Uses GPT-4o-mini (~60% cheaper than GPT-4o) while maintaining full functionality.
+
+### 🔄 **Real-time Monitoring**
+
+The agent monitors HCS topics for governance alerts and automatically rebalances when changes occur:
+
+```bash
+# The agent shows exactly what it's doing:
+🔍 Validating treasury ratios using pure agent approach...
+✅ Contract ratios retrieved: { HBAR: '40', SAUCE: '25', ... }
+✅ Token supply retrieved: 38 (3800000000 raw units, 8 decimals)
+📄 Agent Response: [Complete step-by-step analysis]
+```
+
+### ⚠️ **Advanced: Agent-to-Agent Communication Setup**
 
 #### **Step 0: Quick Connection Test (Recommended)**
 ```bash
@@ -438,9 +550,11 @@ const hederaAgentToolkit = new HederaLangchainToolkit({
   },
 });
 
-// Initialize OpenAI LLM
+// Initialize OpenAI LLM (cost-efficient with GPT-4o-mini)
 const llm = new ChatOpenAI({
-  model: 'gpt-4o-mini',
+  modelName: 'gpt-4o-mini',
+  temperature: 0,  // Deterministic for financial calculations
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 // Create the agent prompt template
