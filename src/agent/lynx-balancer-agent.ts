@@ -7,9 +7,10 @@ import { Client, TopicMessageQuery, Timestamp } from '@hashgraph/sdk';
 import { HederaLangchainToolkit, AgentMode, coreHTSPlugin, coreAccountPlugin, coreConsensusPlugin, coreQueriesPlugin } from 'hedera-agent-kit';
 import { TokenTransferTool } from '../tools/token-transfer-tool.js';
 import { HbarWithdrawalTool } from '../tools/hbar-withdrawal-tool.js';
-import { TokenWithdrawalTool } from '../tools/token-withdrawal-tool.js';
 
 import { ContractRatioTool, TokenSupplyTool } from '../tools/contract-ratio-tool.js';
+import { TokenRatioTool } from '../tools/token-ratio-tool.js';
+import { ContractStateManager, ContractState } from '../utils/contract-state-manager.js';
 
 // Load environment variables
 config();
@@ -60,17 +61,6 @@ export class LynxBalancerAgent {
     }
   };
 
-  // Contract divisor (currently hardcoded to 10, will be DAO parameter in future)
-  private readonly CONTRACT_DIVISOR = 10;
-  
-  // Cached balance state
-  private contractBalances: {
-    hbar: number;
-    tokens: {[tokenId: string]: number};
-    totalValue: number;
-    lastUpdated: Date;
-  } | null = null;
-
   // Blockchain tools
   private hederaAgentToolkit?: HederaLangchainToolkit;
   private agentExecutor?: AgentExecutor;
@@ -80,70 +70,6 @@ export class LynxBalancerAgent {
     this.env = process.env as NodeJS.ProcessEnv & EnvironmentConfig;
   }
 
-  /**
-   * Get token configuration by name or ID
-   */
-  private getTokenConfig(tokenNameOrId: string): any {
-    // Try to find by token name first
-    for (const [name, config] of Object.entries(this.TOKEN_CONFIG)) {
-      if (name === tokenNameOrId || config.tokenId === tokenNameOrId) {
-        return config;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Calculate required token amount using the minting formula
-   * requiredAmount = (lynxAmount * tokenRatio) / divisor
-   * This tells us exactly how much of each token should be in the treasury (in human-readable units)
-   */
-  private calculateRequiredAmount(lynxAmount: number, tokenRatio: number, tokenName: string): number {
-    const tokenConfig = this.getTokenConfig(tokenName);
-    if (!tokenConfig) {
-      throw new Error(`Unknown token: ${tokenName}`);
-    }
-
-    const requiredAmount = lynxAmount * (tokenRatio / this.CONTRACT_DIVISOR);
-    
-    console.log(`🧮 Treasury requirement calculation for ${tokenName}:`);
-    console.log(`   Lynx Total Supply: ${lynxAmount}`);
-    console.log(`   Token Ratio: ${tokenRatio}`);
-    console.log(`   Divisor: ${this.CONTRACT_DIVISOR}`);
-    console.log(`   Required Amount: ${requiredAmount} ${tokenName}`);
-    
-    return requiredAmount;
-  }
-
-  /**
-   * Get the total supply of Lynx tokens from the governance contract
-   */
-  private async getLynxTotalSupply(): Promise<number> {
-    if (!this.agentExecutor) {
-      throw new Error("Agent executor not initialized");
-    }
-
-    try {
-      console.log("📊 Getting Lynx total supply from governance contract...");
-      
-      const response = await this.agentExecutor.invoke({
-        input: `Use the token_supply_query tool to get the total supply of Lynx tokens with token ID ${this.env.CONTRACT_LYNX_TOKEN}. Return ONLY the humanReadableSupply value from the JSON response.`
-      });
-      
-      // Parse the response to extract the human-readable total supply
-      const supplyMatch = response.output.match(/(\d+(?:,\d+)*(?:\.\d+)?)/);
-      if (supplyMatch) {
-        const totalSupply = parseFloat(supplyMatch[1].replace(/,/g, ''));
-        console.log(`📊 Lynx total supply: ${totalSupply}`);
-        return totalSupply;
-      } else {
-        throw new Error("Failed to parse Lynx total supply from contract query response");
-      }
-    } catch (error) {
-      console.error("❌ CRITICAL ERROR: Failed to get Lynx total supply from governance contract", error);
-      throw new Error(`Failed to get Lynx total supply: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
 
   /**
    * Execute full rebalancing based on current contract ratios
@@ -157,7 +83,7 @@ export class LynxBalancerAgent {
   }
 
   /**
-   * Validate that treasury balances match the contract's expected ratios
+   * Validate treasury balances and rebalance each token individually
    */
   private async validateTreasuryRatios(): Promise<void> {
     if (!this.agentExecutor) {
@@ -165,134 +91,79 @@ export class LynxBalancerAgent {
     }
 
     try {
-      console.log("🔍 Validating treasury ratios against contract settings...");
+      console.log("🔍 Starting treasury validation with sequential token processing...");
       
-      // Get contract ratios using the agent
-      const ratioResponse = await this.agentExecutor.invoke({
-        input: `Use the contract_ratio_query tool to get the current token ratios from the governance contract ${this.env.GOVERNANCE_CONTRACT_ID}. Please respond with ONLY the ratios in this exact format:
-HBAR: 50
-WBTC: 3
-SAUCE: 25
-USDC: 15
-JAM: 5
-HEADSTART: 3
-(one line per token, no other text)`
-      });
+      // Get clean contract state using our utility
+      const stateManager = new ContractStateManager();
+      const contractState = await stateManager.fetchContractState();
+      stateManager.close();
 
-      // Parse the ratio response
-      let contractRatios: any = {};
+      // Track if any transfers were made
+      let transfersMade = false;
+
+      // Process each token individually
+      const tokens = ['HBAR', 'WBTC', 'SAUCE', 'USDC', 'JAM', 'HEADSTART'] as const;
       
-      // Look for ratio patterns in the text (format: "HBAR: 50")
-      const ratioPattern = /(\w+):\s*(\d+)/g;
-      const matches = [...ratioResponse.output.matchAll(ratioPattern)];
-      
-      for (const match of matches) {
-        const tokenName = match[1];
-        const ratio = match[2];
-        if (['HBAR', 'WBTC', 'SAUCE', 'USDC', 'JAM', 'HEADSTART'].includes(tokenName)) {
-          contractRatios[tokenName] = ratio;
-        }
-      }
-      
-      if (Object.keys(contractRatios).length === 0) {
-        console.log("⚠️  No contract ratios found, skipping validation");
-        return;
-      }
-
-      if (Object.keys(contractRatios).length === 0) {
-        console.log("⚠️  No contract ratios found, skipping validation");
-        return;
-      }
-
-      console.log("📋 Contract ratios:", contractRatios);
-
-      // Get current balances
-      const balances = await this.getContractBalances();
-      const lynxTotalSupply = await this.getLynxTotalSupply();
-
-      console.log("📊 Validating each token...");
-
-      // Validate each token
-      for (const [tokenName, targetWeight] of Object.entries(contractRatios)) {
-        const tokenConfig = this.getTokenConfig(tokenName);
+      for (const tokenSymbol of tokens) {
+        console.log(`\n🔍 Processing ${tokenSymbol}...`);
         
-        // Skip Lynx token - it's the governance token itself
-        if (tokenName === 'LYNX' || tokenConfig?.tokenId === this.env.CONTRACT_LYNX_TOKEN) {
-          console.log(`⏭️  Skipping ${tokenName} - governance token not held in treasury`);
-          continue;
-        }
+        // Get current balance and target ratio for this token
+        const currentBalance = tokenSymbol === 'HBAR' 
+          ? contractState.contractBalance.hbar
+          : contractState.contractBalance.tokens[tokenSymbol as keyof typeof contractState.contractBalance.tokens];
         
-        if (!tokenConfig) {
-          console.log(`⚠️  No config found for ${tokenName}, skipping`);
-          continue;
-        }
+        const targetRatio = contractState.ratios[tokenSymbol];
+        const lynxSupply = contractState.lynxTotalSupply;
 
-        // Get current amount
-        let currentAmount = 0;
-        if (tokenName === 'HBAR') {
-          currentAmount = balances.hbar;
-        } else {
-          currentAmount = balances.tokens[tokenConfig.tokenId] || 0;
-        }
+        // Check this token's ratio using our tool
+        const tokenRatioTool = new TokenRatioTool();
+        const analysisResult = await tokenRatioTool._call({
+          tokenSymbol,
+          currentBalance,
+          targetRatio,
+          lynxTotalSupply: lynxSupply
+        });
 
-        // Calculate required amount (now in human-readable units)
-        const requiredAmount = this.calculateRequiredAmount(lynxTotalSupply, parseInt(targetWeight as string), tokenName);
+        const analysis = JSON.parse(analysisResult);
+        console.log(`📊 ${tokenSymbol} Analysis:`, analysis.analysis);
 
-        // Calculate difference
-        const difference = requiredAmount - currentAmount;
-        const differencePercent = (Math.abs(difference) / requiredAmount) * 100;
-
-        console.log(`📊 ${tokenName}:`);
-        console.log(`   Current: ${currentAmount.toFixed(6)}`);
-        console.log(`   Required: ${requiredAmount.toFixed(6)}`);
-        console.log(`   Difference: ${difference.toFixed(6)} (${differencePercent.toFixed(2)}%)`);
-
-        // Consider tokens balanced if within 5% of target
-        const tolerancePercent = 5;
-        const toleranceAmount = (requiredAmount * tolerancePercent) / 100;
-        
-        if (Math.abs(difference) > toleranceAmount) {
-          console.log(`   ⚠️  ${tokenName} needs rebalancing`);
+        // If this token needs rebalancing, handle it immediately
+        if (analysis.needsRebalancing) {
+          console.log(`⚖️  ${tokenSymbol} needs rebalancing - executing transfer...`);
           
-          // Execute the rebalancing operation
-          if (difference > 0) {
-            // Need to buy (transfer TO contract)
-            console.log(`   🔄 Executing buy operation for ${tokenName}...`);
-            try {
-              if (tokenName === 'HBAR') {
-                await this.executeHbarTransfer(difference);
-              } else {
-                await this.executeTokenTransfer(tokenConfig.tokenId, difference);
-              }
-              console.log(`   ✅ Buy operation completed for ${tokenName}`);
-            } catch (error) {
-              console.error(`   ❌ Buy operation failed for ${tokenName}:`, error);
-            }
-          } else {
-            // Need to sell (withdraw FROM contract)
-            console.log(`   🔄 Executing sell operation for ${tokenName}...`);
-            try {
-              if (tokenName === 'HBAR') {
-                await this.executeHbarWithdrawal(Math.abs(difference));
-              } else {
-                await this.executeTokenWithdrawal(tokenConfig.tokenId, Math.abs(difference));
-              }
-              console.log(`   ✅ Sell operation completed for ${tokenName}`);
-            } catch (error) {
-              console.error(`   ❌ Sell operation failed for ${tokenName}:`, error);
-            }
-          }
+          const transferResponse = await this.agentExecutor.invoke({
+            input: `${tokenSymbol} is out of balance. Current: ${currentBalance}, Required: ${analysis.requiredBalance}, Status: ${analysis.balanceStatus}.
+
+Execute the appropriate transfer for ${tokenSymbol}:
+- If EXCESS: Use ${tokenSymbol === 'HBAR' ? 'hbar_withdrawal_tool' : 'token_transfer_tool'} to transfer excess FROM contract TO operator
+- If DEFICIT: Use ${tokenSymbol === 'HBAR' ? 'transfer_hbar' : 'token_transfer_tool'} to transfer FROM operator TO contract
+
+Fix ${tokenSymbol} balance now.`
+          });
+          
+          console.log(`📄 ${tokenSymbol} Transfer:`, transferResponse.output);
+          transfersMade = true; // Mark that a transfer was made
         } else {
-          console.log(`   ✅ ${tokenName} is balanced`);
+          console.log(`✅ ${tokenSymbol} is balanced`);
         }
       }
 
-      console.log("✅ Treasury ratio validation completed");
-      
-      // Refresh balances after rebalancing operations
-      console.log("📊 Refreshing balances after rebalancing...");
-      await this.refreshContractBalances();
-      console.log("✅ Balance refresh completed");
+      console.log("\n✅ Sequential token processing completed");
+
+      // If any transfers were made, refresh contract state to capture changes
+      if (transfersMade) {
+        console.log("🔄 Transfers were made - refreshing contract state...");
+        const refreshStateManager = new ContractStateManager();
+        const updatedState = await refreshStateManager.fetchContractState();
+        refreshStateManager.close();
+        
+        console.log("📊 Updated State Summary:");
+        console.log(`   Ratios: ${Object.entries(updatedState.ratios).map(([k,v]) => `${k}=${v}`).join(', ')}`);
+        console.log(`   LYNX Supply: ${updatedState.lynxTotalSupply}`);
+        console.log(`   HBAR Balance: ${updatedState.contractBalance.hbar}`);
+        console.log(`   Token Balances: ${Object.entries(updatedState.contractBalance.tokens).map(([k,v]) => `${k}=${v}`).join(', ')}`);
+        console.log("✅ Contract state refreshed after transfers");
+      }
 
     } catch (error) {
       console.error("❌ Failed to validate treasury ratios:", error);
@@ -309,14 +180,13 @@ HEADSTART: 3
 
     // Validate required environment variables
     const requiredVars = [
-      'BALANCER_AGENT_ACCOUNT_ID',
-      'BALANCER_AGENT_PRIVATE_KEY',
       'OPENAI_API_KEY',
       'HEDERA_ACCOUNT_ID',
       'HEDERA_PRIVATE_KEY',
-      'GOVERNANCE_CONTRACT_ID',
-      'CONTRACT_LYNX_TOKEN'
-      // Note: BALANCER_ALERT_TOPIC_ID is checked later when starting topic monitoring
+      'LYNX_CONTRACT_ID',
+      'CONTRACT_LYNX_TOKEN',
+      'BALANCER_ALERT_TOPIC',
+      'DASHBOARD_ALERT_TOPIC'
     ];
     
     const missingVars = requiredVars.filter(varName => !this.env[varName]);
@@ -325,19 +195,11 @@ HEADSTART: 3
     }
 
     try {
-      // TODO: Re-enable ConversationalAgent when v0.1.205 fixes are confirmed working
-      // Initialize HCS-10 messaging
-      // await this.agentMessaging.initialize();
-      
-      // Activate the agent (no profile creation needed)  
-      // await this.agentMessaging.activateAgent();
-
       // Initialize blockchain tools
       await this.initializeBlockchainTools();
 
       console.log("✅ Lynx Balancer Agent initialized successfully");
-      console.log(`📋 Account ID: ${this.env.BALANCER_AGENT_ACCOUNT_ID}`);
-      console.log(`🤖 Governance Agent: ${this.env.GOVERNANCE_AGENT_ACCOUNT_ID || 'Not configured'}`);
+      console.log(`📋 Account ID: ${this.env.HEDERA_ACCOUNT_ID}`);
       console.log(`🌐 Network: ${this.env.HEDERA_NETWORK || 'testnet'}`);
 
     } catch (error) {
@@ -369,12 +231,14 @@ HEADSTART: 3
         }
       });
 
-      // Initialize OpenAI LLM (following tool-calling-balance-check pattern)
       const llm = new ChatOpenAI({
-        modelName: "gpt-4o",
-        temperature: 0,
-        apiKey: this.env.OPENAI_API_KEY,
-      });
+        modelName: "gpt-4o-mini",           // or "gpt-4o", "gpt-3.5-turbo", etc.
+        temperature: 0,                     // 0 = deterministic, 1 = creative
+        configuration: {
+            baseURL: "https://ai-gateway.vercel.sh/v1",  // Vercel AI Gateway
+        },
+        apiKey: process.env.AI_GATEWAY_API_KEY!,         // Your Vercel AI Gateway key
+    });
 
       // Create the agent prompt template
       const prompt = ChatPromptTemplate.fromMessages([
@@ -388,8 +252,11 @@ HEADSTART: 3
 
           Current Configuration:
           - Operator Account: ${this.env.HEDERA_ACCOUNT_ID}
-          - Governance Contract: ${this.env.GOVERNANCE_CONTRACT_ID}
+          - Governance Contract: ${this.env.LYNX_CONTRACT_ID}
           - Network: ${this.env.HEDERA_NETWORK || 'testnet'}
+
+          Token Mappings:
+          ${Object.entries(this.TOKEN_CONFIG).map(([symbol, config]) => `- ${config.tokenId} = ${symbol} (${config.decimals} decimals)`).join('\n          ')}
 
           Your job is to maintain target portfolio ratios by rebalancing token holdings.`],
         ['user', '{input}'],
@@ -400,11 +267,12 @@ HEADSTART: 3
       const hederaTools = this.hederaAgentToolkit.getTools();
       const tokenTransferTool = new TokenTransferTool(this.client);
       const hbarWithdrawalTool = new HbarWithdrawalTool(this.client);
-      const tokenWithdrawalTool = new TokenWithdrawalTool(this.client);
+
       const contractRatioTool = new ContractRatioTool(this.client);
       const tokenSupplyTool = new TokenSupplyTool(this.client);
+      const tokenRatioTool = new TokenRatioTool();
       // Using built-in get-topic-messages-query instead of custom topic query tool
-      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, tokenWithdrawalTool, contractRatioTool, tokenSupplyTool];
+      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, contractRatioTool, tokenSupplyTool, tokenRatioTool];
 
       // Create the tool-calling agent (following tool-calling-balance-check pattern)
       const agent = await createToolCallingAgent({
@@ -423,7 +291,7 @@ HEADSTART: 3
 
       console.log("✅ Blockchain tools initialized");
       console.log(`📋 Operator Account: ${this.env.HEDERA_ACCOUNT_ID}`);
-      console.log(`🏛️  Governance Contract: ${this.env.GOVERNANCE_CONTRACT_ID}`);
+      console.log(`🏛️  Governance Contract: ${this.env.LYNX_CONTRACT_ID}`);
 
     } catch (error) {
       console.error("❌ Failed to initialize blockchain tools:", error);
@@ -449,10 +317,6 @@ HEADSTART: 3
       });
 
       try {
-        // TODO: Re-enable ConversationalAgent message listening when v0.1.205 fixes are confirmed
-        // Start message listening
-        // await this.agentMessaging.startMessageListening();
-        
         // Start topic monitoring for balancer alerts
         await this.startTopicMonitoring();
       } catch (error) {
@@ -471,20 +335,20 @@ HEADSTART: 3
       throw new Error("Agent executor not initialized");
     }
 
-    const topicId = this.env.BALANCER_ALERT_TOPIC_ID;
+    const topicId = this.env.BALANCER_ALERT_TOPIC;
     if (!topicId || topicId.trim() === '') {
-      console.log("⚠️  BALANCER_ALERT_TOPIC_ID is not configured or empty");
+      console.log("⚠️  BALANCER_ALERT_TOPIC is not configured or empty");
       console.log("🔧 Please run 'npm run test:alert hbar' first to create the topic");
       console.log("📋 Then add the topic ID to your .env file: BALANCER_ALERT_TOPIC_ID=0.0.XXXXXX");
       console.log("🔄 Waiting for topic configuration...");
       
       // Wait and check periodically for topic ID to be configured
-      while (this.isRunning && (!this.env.BALANCER_ALERT_TOPIC_ID || this.env.BALANCER_ALERT_TOPIC_ID.trim() === '')) {
+      while (this.isRunning && (!this.env.BALANCER_ALERT_TOPIC || this.env.BALANCER_ALERT_TOPIC.trim() === '')) {
         await this.sleep(10000);
         // Reload environment (in case .env file was updated)
         const newTopicId = process.env.BALANCER_ALERT_TOPIC_ID;
         if (newTopicId && newTopicId.trim() !== '') {
-          this.env.BALANCER_ALERT_TOPIC_ID = newTopicId;
+          this.env.BALANCER_ALERT_TOPIC = newTopicId;
           break;
         }
       }
@@ -492,15 +356,11 @@ HEADSTART: 3
       if (!this.isRunning) return;
     }
 
-    const finalTopicId = this.env.BALANCER_ALERT_TOPIC_ID!;
+    const finalTopicId = this.env.BALANCER_ALERT_TOPIC!;
     console.log("📡 Starting topic monitoring...");
     console.log(`🎯 Monitoring topic: ${finalTopicId}`);
 
     try {
-      // Initialize contract balances on startup
-      console.log("📊 Initializing contract balance cache...");
-      await this.refreshContractBalances();
-
       // Execute initial rebalancing on startup
       await this.executeRebalancing();
 
@@ -529,8 +389,10 @@ HEADSTART: 3
               console.log(`📨 Message: ${Buffer.from(message.contents).toString("utf8")}`);
               console.log(`🕒 Timestamp: ${new Date(message.consensusTimestamp.toDate())}`);
               
-              // Process the alert message
-              await this.processTopicAlert(message);
+              // Execute rebalancing in response to the alert
+              console.log("🚨 Alert detected - executing rebalancing...");
+              await this.executeRebalancing();
+              console.log("✅ Rebalancing completed in response to topic alert");
               
             } catch (error) {
               console.error("❌ Error processing topic message:", error);
@@ -543,247 +405,6 @@ HEADSTART: 3
 
     } catch (error) {
       console.error("❌ Error setting up topic monitoring:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Process a single topic alert message
-   */
-  private async processTopicAlert(message: { contents: any; consensusTimestamp: any }): Promise<void> {
-    if (!this.agentExecutor) {
-      throw new Error("Agent executor not initialized");
-    }
-
-    try {
-      const messageContent = Buffer.from(message.contents).toString("utf8");
-      console.log("🔍 Processing topic alert...");
-      console.log(`📋 Message content: ${messageContent}`);
-
-      // Refresh contract balances before rebalancing
-      console.log("📊 Refreshing contract balances before rebalancing...");
-      await this.refreshContractBalances();
-
-      // Execute rebalancing in response to the alert
-      console.log("🚨 Alert detected - executing rebalancing...");
-      try {
-        await this.executeRebalancing();
-        console.log("✅ Rebalancing completed in response to topic alert");
-      } catch (rebalanceError) {
-        console.error("❌ Error during rebalancing:", rebalanceError);
-        throw rebalanceError;
-      }
-
-    } catch (error) {
-      console.error("❌ Error processing topic alert:", error);
-    }
-  }
-
-
-  /**
-   * Refresh contract balances from the blockchain and update cache
-   */
-  private async refreshContractBalances(): Promise<void> {
-    if (!this.agentExecutor) throw new Error("Agent executor not initialized");
-
-    try {
-      console.log("📊 Refreshing contract balances...");
-      
-      // Get HBAR balance using the simpler tool
-      const hbarResponse = await this.agentExecutor.invoke({
-        input: `Use the get-hbar-balance-query tool to get the HBAR balance for account ${this.env.GOVERNANCE_CONTRACT_ID}. Please respond with ONLY the balance in tinybars format like this: "BALANCE: 1234567.89 tinybars"`
-      });
-      
-      // Get token balances using the dedicated tool
-      const tokenResponse = await this.agentExecutor.invoke({
-        input: `Use the get-account-token-balances-query tool to get all token balances for account ${this.env.GOVERNANCE_CONTRACT_ID}. Please respond with ONLY the token balances in this exact format:
-TOKEN: 0.0.1183558 | BALANCE: 9000000 | DECIMALS: 6
-TOKEN: 0.0.6200902 | BALANCE: 0 | DECIMALS: 8
-(one line per token, no other text)`
-      });
-
-      console.log(`📊 HBAR balance response: ${hbarResponse.output}`);
-      console.log(`📊 Token balance response: ${tokenResponse.output}`);
-      
-      // Parse HBAR balance directly
-      const hbarBalance = this.parseHbarBalance(hbarResponse.output);
-      
-      // Parse token balances
-      const tokenBalances = this.parseTokenBalances(tokenResponse.output);
-      
-      // Calculate total value (just sum of all balances for now)
-      const totalValue = hbarBalance + Object.values(tokenBalances).reduce((sum: number, value: any) => sum + (value as number), 0);
-      
-      console.log(`📊 Total portfolio breakdown:`);
-      console.log(`   HBAR: ${hbarBalance} HBAR`);
-      console.log(`   Tokens: ${Object.values(tokenBalances).reduce((sum: number, value: any) => sum + (value as number), 0)} total units`);
-      console.log(`   Total: ${totalValue} total units`);
-      
-      // Update cached balances
-      this.contractBalances = {
-        hbar: hbarBalance,
-        tokens: tokenBalances,
-        totalValue: totalValue,
-        lastUpdated: new Date()
-      };
-
-      console.log("✅ Contract balances cached:", this.contractBalances);
-    } catch (error) {
-      console.error("❌ Failed to refresh contract balances:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get current contract balances (from cache or refresh if needed)
-   */
-  private async getContractBalances(): Promise<any> {
-    // If no cache or cache is older than 1 minute, refresh
-    if (!this.contractBalances || 
-        (Date.now() - this.contractBalances.lastUpdated.getTime()) > 60000) {
-      await this.refreshContractBalances();
-    }
-    
-    return this.contractBalances!;
-  }
-
-  /**
-   * Parse HBAR balance from the dedicated HBAR balance tool response
-   */
-  private parseHbarBalance(response: string): number {
-    console.log("🔍 Parsing HBAR balance response...");
-    
-    // Look for the specific format: "BALANCE: 1234567.89 tinybars"
-    const match = response.match(/BALANCE:\s*([\d,]+\.?\d*)\s+tinybars/i);
-    if (match) {
-      const tinybars = parseFloat(match[1].replace(/,/g, ''));
-      const hbarBalance = tinybars / 100000000; // Convert tinybars to HBAR
-      console.log(`📊 Parsed HBAR balance: ${hbarBalance} HBAR (${tinybars} tinybars)`);
-      return hbarBalance;
-    }
-    
-    // Fallback to old format
-    const oldMatch = response.match(/(\d+(?:,\d+)*(?:\.\d+)?)\s+tinybars/);
-    if (oldMatch) {
-      const tinybars = parseFloat(oldMatch[1].replace(/,/g, ''));
-      const hbarBalance = tinybars / 100000000; // Convert tinybars to HBAR
-      console.log(`📊 Parsed HBAR balance: ${hbarBalance} HBAR (${tinybars} tinybars)`);
-      return hbarBalance;
-    }
-    
-    console.log("⚠️  Could not parse HBAR balance, defaulting to 0");
-    return 0;
-  }
-
-  /**
-   * Parse token balances from the token balance query response
-   */
-  private parseTokenBalances(response: string): {[tokenId: string]: number} {
-    console.log("🔍 Parsing token balance response...");
-    const tokens: {[tokenId: string]: number} = {};
-    
-    // Look for the specific format: "TOKEN: 0.0.1183558 | BALANCE: 9000000 | DECIMALS: 6"
-    const tokenMatches = response.matchAll(/TOKEN:\s*(0\.0\.\d+)\s*\|\s*BALANCE:\s*([\d,]+)\s*\|\s*DECIMALS:\s*(\d+)/g);
-    
-    for (const match of tokenMatches) {
-      const tokenId = match[1];
-      const rawBalance = parseInt(match[2].replace(/,/g, ''));
-      const decimals = parseInt(match[3]);
-      const actualBalance = rawBalance / Math.pow(10, decimals);
-      
-      // Store the ACTUAL token amount, not HBAR equivalent
-      tokens[tokenId] = actualBalance;
-      console.log(`📊 Token ${tokenId}: ${rawBalance} raw = ${actualBalance} actual units`);
-    }
-    
-    // Fallback to old format if no matches found
-    if (Object.keys(tokens).length === 0) {
-      const oldTokenMatches = response.matchAll(/\*\*Token ID\*\*:\s+(0\.0\.\d+)[\s\S]*?\*\*Balance\*\*:\s+([\d,]+)[\s\S]*?\*\*Decimals\*\*:\s+(\d+)/g);
-      
-      for (const match of oldTokenMatches) {
-        const tokenId = match[1];
-        const rawBalance = parseInt(match[2].replace(/,/g, ''));
-        const decimals = parseInt(match[3]);
-        const actualBalance = rawBalance / Math.pow(10, decimals);
-        
-        // Store the ACTUAL token amount, not HBAR equivalent
-        tokens[tokenId] = actualBalance;
-        console.log(`📊 Token ${tokenId}: ${rawBalance} raw = ${actualBalance} actual units`);
-      }
-    }
-    
-    return tokens;
-  }
-
-  /**
-   * Execute HBAR transfer to the governance contract
-   */
-  private async executeHbarTransfer(amount: number): Promise<string> {
-    if (!this.agentExecutor) throw new Error("Agent executor not initialized");
-
-    const contractId = this.env.GOVERNANCE_CONTRACT_ID;
-    const treasuryId = this.env.HEDERA_ACCOUNT_ID;
-
-    console.log(`🔄 Transferring ${amount} HBAR from treasury ${treasuryId} to contract ${contractId}`);
-
-    try {
-      const response = await this.agentExecutor.invoke({
-        input: `Transfer ${amount} HBAR from account ${treasuryId} to contract ${contractId}. Please respond with the transaction ID if successful.`
-      });
-      
-      console.log(`✅ HBAR transfer response: ${response.output}`);
-      return `Successfully transferred ${amount} HBAR to governance contract`;
-    } catch (error) {
-      console.error(`❌ HBAR transfer failed:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Execute HBAR withdrawal from the governance contract
-   */
-  private async executeHbarWithdrawal(amount: number): Promise<string> {
-    if (!this.agentExecutor) throw new Error("Agent executor not initialized");
-
-    const contractId = this.env.GOVERNANCE_CONTRACT_ID;
-    const amountInTinybars = Math.floor(amount * 100000000); // Convert HBAR to tinybars
-
-    console.log(`🔄 Withdrawing ${amount} HBAR (${amountInTinybars} tinybars) from contract ${contractId}`);
-
-    try {
-      const response = await this.agentExecutor.invoke({
-        input: `Use the hbar_withdrawal tool to withdraw ${amountInTinybars} tinybars from contract ${contractId}. This calls the emergencyWithdrawHbar function.`
-      });
-      
-      console.log(`✅ HBAR withdrawal response: ${response.output}`);
-      return `Successfully withdrew ${amount} HBAR from governance contract`;
-    } catch (error) {
-      console.error(`❌ HBAR withdrawal failed:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Execute token withdrawal from the governance contract
-   */
-  private async executeTokenWithdrawal(tokenId: string, amount: number): Promise<string> {
-    if (!this.agentExecutor) throw new Error("Agent executor not initialized");
-
-    const contractId = this.env.GOVERNANCE_CONTRACT_ID;
-    const tokenConfig = this.getTokenConfig(tokenId);
-    const amountInRawUnits = Math.floor(amount * Math.pow(10, tokenConfig?.decimals || 8));
-
-    console.log(`🪙 Withdrawing ${amount} units of token ${tokenId} (${amountInRawUnits} raw units) from contract ${contractId}`);
-
-    try {
-      const response = await this.agentExecutor.invoke({
-        input: `Use the token_withdrawal tool to withdraw ${amountInRawUnits} raw units of token ${tokenId} from contract ${contractId} with reason "Treasury rebalancing". This calls the adminWithdrawToken function.`
-      });
-      
-      console.log(`✅ Token withdrawal response: ${response.output}`);
-      return `Successfully withdrew ${amount} units of token ${tokenId} from governance contract`;
-    } catch (error) {
-      console.error(`❌ Token withdrawal failed:`, error);
       throw error;
     }
   }
@@ -806,26 +427,5 @@ TOKEN: 0.0.6200902 | BALANCE: 0 | DECIMALS: 8
     // await this.agentMessaging.stop();
     
     console.log("✅ Lynx Balancer Agent stopped");
-  }
-
-
-
-  /**
-   * Execute token transfer to the governance contract
-   */
-  private async executeTokenTransfer(tokenId: string, amount: number): Promise<string> {
-    if (!this.agentExecutor) throw new Error("Agent executor not initialized");
-
-    console.log(`🪙 Transferring ${amount} units of token ${tokenId} to contract`);
-
-    // Use the token transfer tool via agent executor
-    const transferPrompt = `Transfer ${amount.toFixed(6)} units of token ${tokenId} from account ${this.env.HEDERA_ACCOUNT_ID} to contract ${this.env.GOVERNANCE_CONTRACT_ID}`;
-    
-    const result = await this.agentExecutor.invoke({
-      input: transferPrompt
-    });
-
-    console.log(`✅ Token transfer response: ${result.output}`);
-    return result.output;
   }
 } 
