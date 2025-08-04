@@ -150,7 +150,7 @@ Fix ${tokenSymbol} balance now.`
 
       console.log("\n✅ Sequential token processing completed");
 
-      // If any transfers were made, refresh contract state to capture changes
+      // If any transfers were made, refresh contract state and notify dashboard
       if (transfersMade) {
         console.log("🔄 Transfers were made - refreshing contract state...");
         const refreshStateManager = new ContractStateManager();
@@ -163,6 +163,9 @@ Fix ${tokenSymbol} balance now.`
         console.log(`   HBAR Balance: ${updatedState.contractBalance.hbar}`);
         console.log(`   Token Balances: ${Object.entries(updatedState.contractBalance.tokens).map(([k,v]) => `${k}=${v}`).join(', ')}`);
         console.log("✅ Contract state refreshed after transfers");
+        
+        // Send notification to dashboard
+        await this.sendDashboardNotification(updatedState);
       }
 
     } catch (error) {
@@ -406,6 +409,36 @@ Fix ${tokenSymbol} balance now.`
     } catch (error) {
       console.error("❌ Error setting up topic monitoring:", error);
       throw error;
+    }
+  }
+
+  /**
+   * Send notification to dashboard topic when rebalancing is completed
+   */
+  private async sendDashboardNotification(contractState: ContractState): Promise<void> {
+    try {
+      if (!this.agentExecutor || !this.env.DASHBOARD_ALERT_TOPIC) {
+        console.log("⚠️  Dashboard notification skipped - missing agent executor or topic ID");
+        return;
+      }
+
+      console.log("📡 Sending rebalancing notification to dashboard...");
+      
+      const notificationMessage = `Rebalancing completed at ${new Date().toISOString()}. 
+Contract state updated:
+- LYNX Supply: ${contractState.lynxTotalSupply}
+- HBAR Balance: ${contractState.contractBalance.hbar}
+- Token Balances: ${Object.entries(contractState.contractBalance.tokens).map(([k,v]) => `${k}=${v}`).join(', ')}`;
+
+      const response = await this.agentExecutor.invoke({
+        input: `Send this rebalancing notification to the dashboard topic (${this.env.DASHBOARD_ALERT_TOPIC}): ${notificationMessage}`
+      });
+
+      console.log("✅ Dashboard notification sent successfully");
+      console.log(`📄 Response: ${response.output}`);
+
+    } catch (error) {
+      console.error("❌ Failed to send dashboard notification:", error);
     }
   }
 
