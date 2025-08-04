@@ -7,8 +7,10 @@ import { Client, TopicMessageQuery, Timestamp } from '@hashgraph/sdk';
 import { HederaLangchainToolkit, AgentMode, coreHTSPlugin, coreAccountPlugin, coreConsensusPlugin, coreQueriesPlugin } from 'hedera-agent-kit';
 import { TokenTransferTool } from '../tools/token-transfer-tool.js';
 import { HbarWithdrawalTool } from '../tools/hbar-withdrawal-tool.js';
-import { TokenWithdrawalTool } from '../tools/token-withdrawal-tool.js';
+
 import { ContractRatioTool, TokenSupplyTool } from '../tools/contract-ratio-tool.js';
+import { TokenRatioTool } from '../tools/token-ratio-tool.js';
+import { ContractStateManager, ContractState } from '../utils/contract-state-manager.js';
 
 // Load environment variables
 config();
@@ -81,8 +83,7 @@ export class LynxBalancerAgent {
   }
 
   /**
-   * Validate that treasury balances match the contract's expected ratios
-   * Explicit step-by-step approach with specific tool calls
+   * Validate treasury balances and rebalance each token individually
    */
   private async validateTreasuryRatios(): Promise<void> {
     if (!this.agentExecutor) {
@@ -90,63 +91,78 @@ export class LynxBalancerAgent {
     }
 
     try {
-      console.log("🔍 Starting explicit treasury validation process...");
+      console.log("🔍 Starting treasury validation with sequential token processing...");
       
-      // STEP 1: Get Contract Ratios (1 specific call)
-      console.log("📊 Step 1: Getting contract ratios...");
-      const ratiosResponse = await this.agentExecutor.invoke({
-        input: `Use the contract_ratio_query tool to get current ratios from governance contract ${this.env.GOVERNANCE_CONTRACT_ID}. Report the exact ratios you received.`
-      });
-      console.log("📄 Ratios:", ratiosResponse.output);
+      // Get clean contract state using our utility
+      const stateManager = new ContractStateManager();
+      const contractState = await stateManager.fetchContractState();
+      stateManager.close();
 
-      // STEP 2: Get LYNX Total Supply (1 specific call)
-      console.log("🔢 Step 2: Getting LYNX total supply...");
-      const supplyResponse = await this.agentExecutor.invoke({
-        input: `Use the token_supply_query tool to get total supply of LYNX token ${this.env.CONTRACT_LYNX_TOKEN}. Report the exact supply number.`
-      });
-      console.log("📄 Supply:", supplyResponse.output);
+      // Track if any transfers were made
+      let transfersMade = false;
 
-      // STEP 3: Get HBAR Balance (1 specific call)
-      console.log("💰 Step 3: Getting HBAR balance...");
-      const hbarResponse = await this.agentExecutor.invoke({
-        input: `Use the get_hbar_balance_query tool to get current HBAR balance for contract ${this.env.GOVERNANCE_CONTRACT_ID}. Report the current HBAR balance.`
-      });
-      console.log("📄 HBAR Balance:", hbarResponse.output);
+      // Process each token individually
+      const tokens = ['HBAR', 'WBTC', 'SAUCE', 'USDC', 'JAM', 'HEADSTART'] as const;
+      
+      for (const tokenSymbol of tokens) {
+        console.log(`\n🔍 Processing ${tokenSymbol}...`);
+        
+        // Get current balance and target ratio for this token
+        const currentBalance = tokenSymbol === 'HBAR' 
+          ? contractState.contractBalance.hbar
+          : contractState.contractBalance.tokens[tokenSymbol as keyof typeof contractState.contractBalance.tokens];
+        
+        const targetRatio = contractState.ratios[tokenSymbol];
+        const lynxSupply = contractState.lynxTotalSupply;
 
-      // STEP 4: Get Token Balances (1 specific call)
-      console.log("🪙 Step 4: Getting token balances...");
-      const balancesResponse = await this.agentExecutor.invoke({
-        input: `Use the get_account_token_balances_query tool to get current token balances for contract ${this.env.GOVERNANCE_CONTRACT_ID}. Report all current token balances.`
-      });
-      console.log("📄 Token Balances:", balancesResponse.output);
-
-      // STEP 5: Calculate & Analyze (1 specific call)
-      console.log("🧮 Step 5: Analyzing balance requirements...");
-      const analysisResponse = await this.agentExecutor.invoke({
-        input: `Based on the data collected above, calculate required balances using: Required = (LYNX Supply × Ratio) ÷ 10
-
-Compare current vs required for each token and check if any are >5% out of balance.
-Report: "REBALANCE NEEDED: [token names]" or "ALL BALANCED"
-Skip the LYNX token itself since it's the governance token.`
-      });
-      console.log("📄 Analysis:", analysisResponse.output);
-
-            // STEP 6: Conditional Execution (0-1 specific calls)
-      if (analysisResponse.output.includes("REBALANCE NEEDED")) {
-        console.log("⚖️  Step 6: Executing ALL required transfers...");
-        const transferResponse = await this.agentExecutor.invoke({
-          input: `Execute transfers for ALL imbalanced tokens you identified. Use the appropriate tools:
-- transfer_hbar tool to send HBAR TO the contract (if need more HBAR)
-- token_transfer_tool to send tokens TO the contract (if need more tokens)  
-- hbar_withdrawal_tool to withdraw HBAR FROM contract (if have too much HBAR)
-- token_withdrawal_tool to withdraw tokens FROM contract (if have too much tokens)
-
-Execute ALL necessary transfers to bring every out-of-balance token back within the 5% tolerance range.`
+        // Check this token's ratio using our tool
+        const tokenRatioTool = new TokenRatioTool();
+        const analysisResult = await tokenRatioTool._call({
+          tokenSymbol,
+          currentBalance,
+          targetRatio,
+          lynxTotalSupply: lynxSupply
         });
-        console.log("📄 Transfer Result:", transferResponse.output);
-        console.log("✅ All rebalancing transfers completed");
-      } else {
-        console.log("✅ All balances are within tolerance - no transfers needed");
+
+        const analysis = JSON.parse(analysisResult);
+        console.log(`📊 ${tokenSymbol} Analysis:`, analysis.analysis);
+
+        // If this token needs rebalancing, handle it immediately
+        if (analysis.needsRebalancing) {
+          console.log(`⚖️  ${tokenSymbol} needs rebalancing - executing transfer...`);
+          
+          const transferResponse = await this.agentExecutor.invoke({
+            input: `${tokenSymbol} is out of balance. Current: ${currentBalance}, Required: ${analysis.requiredBalance}, Status: ${analysis.balanceStatus}.
+
+Execute the appropriate transfer for ${tokenSymbol}:
+- If EXCESS: Use ${tokenSymbol === 'HBAR' ? 'hbar_withdrawal_tool' : 'token_transfer_tool'} to transfer excess FROM contract TO operator
+- If DEFICIT: Use ${tokenSymbol === 'HBAR' ? 'transfer_hbar' : 'token_transfer_tool'} to transfer FROM operator TO contract
+
+Fix ${tokenSymbol} balance now.`
+          });
+          
+          console.log(`📄 ${tokenSymbol} Transfer:`, transferResponse.output);
+          transfersMade = true; // Mark that a transfer was made
+        } else {
+          console.log(`✅ ${tokenSymbol} is balanced`);
+        }
+      }
+
+      console.log("\n✅ Sequential token processing completed");
+
+      // If any transfers were made, refresh contract state to capture changes
+      if (transfersMade) {
+        console.log("🔄 Transfers were made - refreshing contract state...");
+        const refreshStateManager = new ContractStateManager();
+        const updatedState = await refreshStateManager.fetchContractState();
+        refreshStateManager.close();
+        
+        console.log("📊 Updated State Summary:");
+        console.log(`   Ratios: ${Object.entries(updatedState.ratios).map(([k,v]) => `${k}=${v}`).join(', ')}`);
+        console.log(`   LYNX Supply: ${updatedState.lynxTotalSupply}`);
+        console.log(`   HBAR Balance: ${updatedState.contractBalance.hbar}`);
+        console.log(`   Token Balances: ${Object.entries(updatedState.contractBalance.tokens).map(([k,v]) => `${k}=${v}`).join(', ')}`);
+        console.log("✅ Contract state refreshed after transfers");
       }
 
     } catch (error) {
@@ -164,14 +180,13 @@ Execute ALL necessary transfers to bring every out-of-balance token back within 
 
     // Validate required environment variables
     const requiredVars = [
-      'BALANCER_AGENT_ACCOUNT_ID',
-      'BALANCER_AGENT_PRIVATE_KEY',
       'OPENAI_API_KEY',
       'HEDERA_ACCOUNT_ID',
       'HEDERA_PRIVATE_KEY',
-      'GOVERNANCE_CONTRACT_ID',
-      'CONTRACT_LYNX_TOKEN'
-      // Note: BALANCER_ALERT_TOPIC_ID is checked later when starting topic monitoring
+      'LYNX_CONTRACT_ID',
+      'CONTRACT_LYNX_TOKEN',
+      'BALANCER_ALERT_TOPIC',
+      'DASHBOARD_ALERT_TOPIC'
     ];
     
     const missingVars = requiredVars.filter(varName => !this.env[varName]);
@@ -180,19 +195,11 @@ Execute ALL necessary transfers to bring every out-of-balance token back within 
     }
 
     try {
-      // TODO: Re-enable ConversationalAgent when v0.1.205 fixes are confirmed working
-      // Initialize HCS-10 messaging
-      // await this.agentMessaging.initialize();
-      
-      // Activate the agent (no profile creation needed)  
-      // await this.agentMessaging.activateAgent();
-
       // Initialize blockchain tools
       await this.initializeBlockchainTools();
 
       console.log("✅ Lynx Balancer Agent initialized successfully");
-      console.log(`📋 Account ID: ${this.env.BALANCER_AGENT_ACCOUNT_ID}`);
-      console.log(`🤖 Governance Agent: ${this.env.GOVERNANCE_AGENT_ACCOUNT_ID || 'Not configured'}`);
+      console.log(`📋 Account ID: ${this.env.HEDERA_ACCOUNT_ID}`);
       console.log(`🌐 Network: ${this.env.HEDERA_NETWORK || 'testnet'}`);
 
     } catch (error) {
@@ -224,12 +231,14 @@ Execute ALL necessary transfers to bring every out-of-balance token back within 
         }
       });
 
-      // Initialize OpenAI LLM (following tool-calling-balance-check pattern)
       const llm = new ChatOpenAI({
-        modelName: "gpt-4o-mini",
-        temperature: 0,
-        apiKey: this.env.OPENAI_API_KEY,
-      });
+        modelName: "gpt-4o-mini",           // or "gpt-4o", "gpt-3.5-turbo", etc.
+        temperature: 0,                     // 0 = deterministic, 1 = creative
+        configuration: {
+            baseURL: "https://ai-gateway.vercel.sh/v1",  // Vercel AI Gateway
+        },
+        apiKey: process.env.AI_GATEWAY_API_KEY!,         // Your Vercel AI Gateway key
+    });
 
       // Create the agent prompt template
       const prompt = ChatPromptTemplate.fromMessages([
@@ -243,8 +252,11 @@ Execute ALL necessary transfers to bring every out-of-balance token back within 
 
           Current Configuration:
           - Operator Account: ${this.env.HEDERA_ACCOUNT_ID}
-          - Governance Contract: ${this.env.GOVERNANCE_CONTRACT_ID}
+          - Governance Contract: ${this.env.LYNX_CONTRACT_ID}
           - Network: ${this.env.HEDERA_NETWORK || 'testnet'}
+
+          Token Mappings:
+          ${Object.entries(this.TOKEN_CONFIG).map(([symbol, config]) => `- ${config.tokenId} = ${symbol} (${config.decimals} decimals)`).join('\n          ')}
 
           Your job is to maintain target portfolio ratios by rebalancing token holdings.`],
         ['user', '{input}'],
@@ -255,11 +267,12 @@ Execute ALL necessary transfers to bring every out-of-balance token back within 
       const hederaTools = this.hederaAgentToolkit.getTools();
       const tokenTransferTool = new TokenTransferTool(this.client);
       const hbarWithdrawalTool = new HbarWithdrawalTool(this.client);
-      const tokenWithdrawalTool = new TokenWithdrawalTool(this.client);
+
       const contractRatioTool = new ContractRatioTool(this.client);
       const tokenSupplyTool = new TokenSupplyTool(this.client);
+      const tokenRatioTool = new TokenRatioTool();
       // Using built-in get-topic-messages-query instead of custom topic query tool
-      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, tokenWithdrawalTool, contractRatioTool, tokenSupplyTool];
+      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, contractRatioTool, tokenSupplyTool, tokenRatioTool];
 
       // Create the tool-calling agent (following tool-calling-balance-check pattern)
       const agent = await createToolCallingAgent({
@@ -278,7 +291,7 @@ Execute ALL necessary transfers to bring every out-of-balance token back within 
 
       console.log("✅ Blockchain tools initialized");
       console.log(`📋 Operator Account: ${this.env.HEDERA_ACCOUNT_ID}`);
-      console.log(`🏛️  Governance Contract: ${this.env.GOVERNANCE_CONTRACT_ID}`);
+      console.log(`🏛️  Governance Contract: ${this.env.LYNX_CONTRACT_ID}`);
 
     } catch (error) {
       console.error("❌ Failed to initialize blockchain tools:", error);
@@ -322,20 +335,20 @@ Execute ALL necessary transfers to bring every out-of-balance token back within 
       throw new Error("Agent executor not initialized");
     }
 
-    const topicId = this.env.BALANCER_ALERT_TOPIC_ID;
+    const topicId = this.env.BALANCER_ALERT_TOPIC;
     if (!topicId || topicId.trim() === '') {
-      console.log("⚠️  BALANCER_ALERT_TOPIC_ID is not configured or empty");
+      console.log("⚠️  BALANCER_ALERT_TOPIC is not configured or empty");
       console.log("🔧 Please run 'npm run test:alert hbar' first to create the topic");
       console.log("📋 Then add the topic ID to your .env file: BALANCER_ALERT_TOPIC_ID=0.0.XXXXXX");
       console.log("🔄 Waiting for topic configuration...");
       
       // Wait and check periodically for topic ID to be configured
-      while (this.isRunning && (!this.env.BALANCER_ALERT_TOPIC_ID || this.env.BALANCER_ALERT_TOPIC_ID.trim() === '')) {
+      while (this.isRunning && (!this.env.BALANCER_ALERT_TOPIC || this.env.BALANCER_ALERT_TOPIC.trim() === '')) {
         await this.sleep(10000);
         // Reload environment (in case .env file was updated)
         const newTopicId = process.env.BALANCER_ALERT_TOPIC_ID;
         if (newTopicId && newTopicId.trim() !== '') {
-          this.env.BALANCER_ALERT_TOPIC_ID = newTopicId;
+          this.env.BALANCER_ALERT_TOPIC = newTopicId;
           break;
         }
       }
@@ -343,7 +356,7 @@ Execute ALL necessary transfers to bring every out-of-balance token back within 
       if (!this.isRunning) return;
     }
 
-    const finalTopicId = this.env.BALANCER_ALERT_TOPIC_ID!;
+    const finalTopicId = this.env.BALANCER_ALERT_TOPIC!;
     console.log("📡 Starting topic monitoring...");
     console.log(`🎯 Monitoring topic: ${finalTopicId}`);
 

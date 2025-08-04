@@ -1,6 +1,13 @@
-# 🦌⚡ Lynx Balancer Agent
+```
+╔═══════════════════════════════════════════════════════════════╗
+║                  🦌⚡ LYNX BALANCER AGENT                      ║
+║           Autonomous Treasury Rebalancing Agent               ║
+╚═══════════════════════════════════════════════════════════════╝
+```
 
 **Pure Agent-Driven Treasury Rebalancing** - An intelligent AI agent that autonomously manages tokenized index fund treasuries using Hedera blockchain tools with complete transparency and step-by-step decision-making.
+
+**🤝 Works with:** [Lynx Governance Agent V2](https://github.com/0xPrimordia/lynx-governance-agentv2) - The companion governance agent that manages portfolio parameters and triggers rebalancing operations.
 
 ## 🎯 Overview
 
@@ -22,7 +29,7 @@ Instead of traditional rule-based systems, this agent:
 - ✅ **Real-time Data**: Fetches live contract ratios and token supplies from blockchain
 - ✅ **Cost-Efficient**: Uses GPT-4o-mini for production-ready economics  
 - ✅ **Step-by-Step Reporting**: Complete visibility into balance checks and transfers
-- ✅ **HCS Topic Monitoring**: Responds to governance alerts automatically
+- ✅ **Simple Deployment**: Straightforward setup with minimal configuration
 - ✅ **Direct Tool Calling**: Agent calls Hedera tools directly for maximum flexibility
 
 ## 📋 **Agent Output Example**
@@ -100,7 +107,7 @@ All tokens are now within the 5% tolerance. The treasury portfolio is successful
 1. **Node.js 20+** installed
 2. **Hedera Testnet Account** with HBAR balance
 3. **OpenAI API Key** for AI agent functionality
-4. **Governance Agent** (separate project) configured for HCS-10 communication
+4. **[Lynx Governance Agent V2](https://github.com/0xPrimordia/lynx-governance-agentv2)** - Optional for automated governance integration
 
 ### Installation
 
@@ -126,19 +133,8 @@ HEDERA_PRIVATE_KEY=YOUR_ED25519_DER_PRIVATE_KEY_HERE
 # OpenAI Configuration
 OPENAI_API_KEY=sk-your-openai-api-key-here
 
-# Agent-to-Agent Communication (HCS-10)
-BALANCER_AGENT_ACCOUNT_ID=0.0.YOUR_BALANCER_ACCOUNT
-BALANCER_AGENT_PRIVATE_KEY=your_balancer_private_key_here
-GOVERNANCE_AGENT_ACCOUNT_ID=0.0.YOUR_GOVERNANCE_ACCOUNT
-
-# Agent Registration
-AGENT_NAME=LynxTreasuryBalancer
-AGENT_DESCRIPTION=Automated treasury rebalancing agent for Lynx Index Token contract
-AGENT_CAPABILITIES=DEFI,PORTFOLIO_MANAGEMENT,TREASURY_BALANCING
-AGENT_TAGS=lynx,treasury,rebalancing,automated
-
 # Treasury Configuration
-GOVERNANCE_CONTRACT_ID=0.0.6216949
+LYNX_CONTRACT_ID=0.0.6216949
 CONTRACT_SAUCE_TOKEN=0.0.1183558
 CONTRACT_LYNX_TOKEN=0.0.6200902
 CONTRACT_WBTC_TOKEN=0.0.6212930
@@ -148,57 +144,14 @@ CONTRACT_HEADSTART_TOKEN=0.0.6212933
 TREASURY_ACCOUNT_ID=0.0.4340026
 ```
 
-## 🤖 Agent-to-Agent Communication
+## 🔗 Integration with Governance Agent
 
-### HCS-10 Protocol Setup
+The Lynx Balancer Agent works seamlessly with the **[Lynx Governance Agent V2](https://github.com/0xPrimordia/lynx-governance-agentv2)** to provide complete decentralized portfolio management:
 
-The Lynx Balancer Agent uses the HCS-10 protocol for secure communication with governance agents:
+- **Governance Agent**: Manages governance parameters, voting, and ratio updates
+- **Balancer Agent**: Executes portfolio rebalancing based on current contract ratios
 
-#### 1. **Connection-Based Messaging**
-```mermaid
-graph LR
-    A[Governance Agent] -->|1. Connection Request| B[Balancer Inbound Topic]
-    B -->|2. Auto-Approve| C[Connection Topic Created]
-    C -->|3. Established| D[Private Channel]
-    A -.->|4. Messages| D
-    D -.->|5. Responses| A
-```
-
-#### 2. **Message Flow**
-When governance parameters change:
-
-```typescript
-// Governance agent sends update
-const update = {
-  type: 'GOVERNANCE_RATIO_UPDATE',
-  updatedRatios: { hbar: 30, wbtc: 15, sauce: 20, usdc: 15, jam: 12, headstart: 8 },
-  previousRatios: { hbar: 25, wbtc: 15, sauce: 20, usdc: 15, jam: 15, headstart: 10 },
-  changedParameter: 'hbar_ratio',
-  changedValue: { old: 25, new: 30 },
-  effectiveTimestamp: '2024-01-15T10:30:00Z',
-  transactionId: '0.0.123456@1641234567.123456789',
-  changeSummary: 'Increased HBAR allocation from 25% to 30%',
-  reason: 'DAO vote #15 - Increase HBAR exposure due to market conditions'
-};
-```
-
-#### 3. **Balancer Response**
-```typescript
-// Balancer agent responds with status
-const status = {
-  type: 'REBALANCE_STATUS',
-  status: 'completed',
-  payload: {
-    completedSwaps: 3,
-    totalSwaps: 3,
-    progressPercentage: 100,
-    totalValueRebalanced: 3250.25,
-    totalSlippageIncurred: 0.42,
-    totalFeesSpent: 0.18,
-    currentBalances: { /* updated balances */ }
-  }
-};
-```
+The balancer agent can operate independently by monitoring contract ratios directly, or integrate with governance alerts for immediate rebalancing when parameters change.
 
 ## 🛠️ Usage
 
@@ -224,9 +177,9 @@ The agent will:
 
 **💰 Cost Efficient**: Uses GPT-4o-mini (~60% cheaper than GPT-4o) while maintaining full functionality.
 
-### 🔄 **Real-time Monitoring**
+### 🔄 **Agent Operation**
 
-The agent monitors HCS topics for governance alerts and automatically rebalances when changes occur:
+The agent provides complete transparency in its operations:
 
 ```bash
 # The agent shows exactly what it's doing:
@@ -236,90 +189,19 @@ The agent monitors HCS topics for governance alerts and automatically rebalances
 📄 Agent Response: [Complete step-by-step analysis]
 ```
 
-### ⚠️ **Advanced: Agent-to-Agent Communication Setup**
+### 🔧 **Testing & Validation**
 
-#### **Step 0: Quick Connection Test (Recommended)**
+Test the agent's rebalancing functionality:
+
 ```bash
-# Test connection setup with 2-minute window:
-npm run test:quick
-```
-This starts the balancer agent for 2 minutes to test if connections work, then stops automatically.
+# Test rebalancing logic
+npm run test:balancing
 
-**Alternative: Basic Setup Test**
-```bash
-# Test basic agent functionality with minimal API usage:
-npm run test:connection
+# Send test alert (if using with governance agent)
+npm run test:alert
 ```
 
-#### **Step 1: Start the Persistent Balancer Agent (This Project)**
-```bash
-# FIRST: Start the persistent balancer agent 
-npm run balancer:agent
-```
-This starts the balancer agent with proper rate limit handling and keeps it running to monitor for connections.
-
-#### **Step 2: Connect from Governance Agent (Your Other Project)**
-```bash
-# SECOND: In your governance project, run:
-npm run demo:hcs10 demo
-```
-This will connect to the running balancer agent and test communication.
-
-**⚠️ Rate Limit Management:** The agent now includes exponential backoff for OpenAI 429 errors and reduced API call frequency to prevent rate limit issues.
-
-### Demo Mode (Testing Only - Not for Real Connections)
-```bash
-# Run communication setup demo (does not maintain persistent connections)
-npm run demo:hcs10 demo
-
-# Check agent configuration
-npm run demo:hcs10 connections
-
-# View message format examples
-npm run demo:hcs10 test-message "Hello from balancer!"
-```
-
-**Note:** The demo commands are for testing setup only. For real agent-to-agent communication, you MUST use the persistent agent (`npm run balancer:agent`).
-
-### Integration with Governance Agent
-
-#### From Your Governance Agent Project:
-
-1. **Establish Connection**
-```typescript
-// In your governance agent
-await governanceAgent.processMessage(`
-  Initiate connection to account ${BALANCER_AGENT_ACCOUNT_ID}
-`);
-```
-
-2. **Send Governance Updates**
-```typescript
-// When governance parameters change
-const ratioUpdate = {
-  type: 'GOVERNANCE_RATIO_UPDATE',
-  updatedRatios: newRatios,
-  previousRatios: oldRatios,
-  changedParameter: 'parameter_name',
-  changedValue: { old: oldValue, new: newValue },
-  effectiveTimestamp: new Date().toISOString(),
-  transactionId: transactionId,
-  changeSummary: 'Human readable summary',
-  reason: 'Reason for change'
-};
-
-await governanceAgent.processMessage(`
-  Send message to connection ${BALANCER_AGENT_ACCOUNT_ID}: ${JSON.stringify(ratioUpdate)}
-`);
-```
-
-3. **Monitor Balancer Responses**
-```typescript
-// Listen for status updates from balancer
-await governanceAgent.processMessage(`
-  Check for new messages from connection ${BALANCER_AGENT_ACCOUNT_ID}
-`);
-```
+The agent will show detailed step-by-step calculations and execute any necessary transfers to maintain the target portfolio ratios.
 
 ## 🔧 Development
 
@@ -327,143 +209,79 @@ await governanceAgent.processMessage(`
 
 ```bash
 # Core functionality
-npm run dev                    # Development mode
+npm run dev                    # Development mode with hot reload
 npm run build                  # Build TypeScript
 npm run start                  # Production mode
 
-# Agent operations
-npm run balancer:agent         # Start persistent balancer agent (V3)
-npm run test:v3-setup         # Test V3 Hedera Agent Kit setup
-npm run test:quick             # Quick 2-minute connection test (recommended)
-npm run test:connection        # Test basic setup with minimal API usage
-npm run demo:hcs10 demo       # Full V3 demo with LangChain agents
-npm run demo:hcs10 connections # Check connections
-npm run register-agent        # Register agent (if needed)
-
-# Examples and testing
-npm run v3:hcs10-agent        # V3 HCS-10 agent example
-npm run hybrid:agent          # Hybrid agent example
-npm run langchain:tool-calling-agent  # LangChain examples
+# Testing and validation
+npm run test:balancing         # Test rebalancing logic
+npm run test:alert             # Send test alert
+npm run clean                  # Clean build directory
+npm run type-check             # TypeScript type checking
+npm run lint                   # ESLint code checking
+npm run lint:fix               # Fix ESLint issues
 ```
 
-### Message Types
+### Agent Architecture
 
-#### Governance Ratio Update
-```typescript
-interface GovernanceRatioUpdate {
-  type: 'GOVERNANCE_RATIO_UPDATE';
-  updatedRatios: Record<string, number>;     // New target allocations
-  previousRatios: Record<string, number>;    // Previous allocations
-  changedParameter: string;                  // Which parameter changed
-  changedValue: { old: number; new: number }; // Specific change
-  effectiveTimestamp: string;                // When change takes effect
-  transactionId: string;                     // Hedera transaction ID
-  changeSummary: string;                     // Human-readable summary
-  reason: string;                           // Why the change occurred
-}
-```
+The Lynx Balancer Agent is built with a **pure agentic approach** using:
 
-#### Rebalance Status Response
-```typescript
-interface RebalanceStatusMessage {
-  type: 'REBALANCE_STATUS';
-  version: '1.0';
-  timestamp: number;
-  originalRequestId: string;
-  status: 'started' | 'in_progress' | 'completed' | 'failed' | 'paused';
-  payload: {
-    completedSwaps: number;
-    totalSwaps: number;
-    progressPercentage: number;
-    totalValueRebalanced: number;    // USD value
-    totalSlippageIncurred: number;   // Percentage
-    totalFeesSpent: number;          // HBAR
-    currentBalances?: Record<string, number>;
-    error?: {
-      code: string;
-      message: string;
-      failedSwap?: string;
-      recoveryAction?: string;
-    };
-  };
-}
-```
+- **Hedera Agent Kit V3**: Direct blockchain tool integration
+- **LangChain Agent Framework**: Intelligent reasoning and tool calling
+- **GPT-4o-mini**: Cost-efficient AI processing
+- **TypeScript**: Type-safe development
 
-## 🔐 Security & Permissions
+Key components:
+- **LynxBalancerAgent**: Main agent class with initialization and execution logic  
+- **Custom Tools**: Specialized tools for token transfers and contract interactions
+- **Environment Config**: Typed configuration interface for all settings
 
-### Connection Security
-- **Explicit Approval Required**: All connections must be approved by the balancer agent
-- **Account-Based Authentication**: All messages include verified sender identification
-- **Private Channels**: Each connection gets its own dedicated HCS topic
+## 🔐 Security & Best Practices
 
-### Access Control
-```typescript
-// Auto-approve specific governance agents
-const connectionMonitoringPrompt = `
-  Start monitoring for connection requests. 
-  Automatically accept connections from account ${GOVERNANCE_AGENT_ACCOUNT_ID}.
-  Do not charge any fees for connections from the governance agent.
-`;
-```
+### Environment Security
+- **Private Key Protection**: Never commit private keys to version control
+- **Environment Variables**: Use `.env` files for all sensitive configuration
+- **Operator Account**: Use dedicated accounts with minimal required permissions
 
-### Fee-Based Access Control (Optional)
-```typescript
-// Configure fees for premium access
-const feeConfig = {
-  hbarFee: 0.05,  // 0.05 HBAR per message
-  exemptAccountIds: [GOVERNANCE_AGENT_ACCOUNT_ID]  // Exempt trusted agents
-};
-```
+### Transaction Safety
+- **Validation**: All environment variables are validated before agent initialization
+- **Error Handling**: Comprehensive error handling with detailed logging
+- **Tolerance Checks**: Built-in 5% tolerance to prevent unnecessary micro-adjustments
 
 ## 📊 Monitoring & Debugging
 
-### Connection Status
-```bash
-# Check active connections
-npm run demo:hcs10 connections
-
-# Test connectivity
-npm run demo:hcs10 test-message "Connectivity test"
-```
-
 ### Agent Logs
 The agent provides detailed logging for:
-- Connection establishment and approval
-- Message parsing and validation
-- Rebalancing progress and status
+- Environment variable validation and initialization
+- Contract ratio retrieval and analysis
+- Balance calculations and tolerance checks
+- Transfer execution and confirmation
 - Error handling and recovery
 
 ### Common Issues & Troubleshooting
 
-**❌ "Connection not established within timeout"**
+**❌ "Missing required environment variables"**
 ```bash
 ✅ Solution: 
-1. FIRST: Start balancer agent: npm run balancer:agent
-2. Wait for "BALANCER AGENT IS NOW READY FOR CONNECTIONS" message
-3. THEN: Run governance agent from your other project
-4. Check that both agents show the correct account IDs
+1. Copy env.example to .env
+2. Fill in all required values (HEDERA_ACCOUNT_ID, HEDERA_PRIVATE_KEY, etc.)
+3. Ensure private key is in correct ED25519 DER format
 ```
 
-**❌ "Cannot monitor for connections. No agent is currently active."**
+**❌ "Cannot read properties of undefined (reading 'publicKey')"**
 ```bash
 ✅ Solution: 
-1. The agent needs to be properly registered in HCS-11 registry
-2. Run the persistent agent (npm run balancer:agent), not the demo
-3. Make sure BALANCER_AGENT_ACCOUNT_ID is set correctly
-```
-
-**❌ "Agent not initialized"**
-```bash
-✅ Solution: Don't create multiple agent instances
-Use the persistent agent which maintains one instance
+1. Check that HEDERA_ACCOUNT_ID and HEDERA_PRIVATE_KEY are set
+2. Verify private key format is correct ED25519 DER encoding
+3. Ensure .env file is in the project root directory
 ```
 
 **❌ OpenAI Rate Limits**
 ```bash
 ✅ Solution: 
 1. Wait for rate limits to reset (usually 1-2 minutes)
-2. Use the persistent agent to avoid creating multiple instances
-3. Consider upgrading your OpenAI plan for higher rate limits
+2. Consider upgrading your OpenAI plan for higher rate limits
+3. The agent uses GPT-4o-mini for cost efficiency
 ```
 
 ## 🚀 Deployment
@@ -474,23 +292,22 @@ Use the persistent agent which maintains one instance
 ```bash
 # Use mainnet for production
 HEDERA_NETWORK=mainnet
-BALANCER_AGENT_ACCOUNT_ID=0.0.PRODUCTION_ACCOUNT
-BALANCER_AGENT_PRIVATE_KEY=production_private_key
+HEDERA_ACCOUNT_ID=0.0.PRODUCTION_ACCOUNT
+HEDERA_PRIVATE_KEY=production_private_key
+OPENAI_API_KEY=sk-production-key-here
 ```
 
-2. **Start Persistent Agent**
+2. **Build and Start**
 ```bash
 npm run build
 npm start
-
-# Or directly
-npm run balancer:agent
 ```
 
 3. **Monitor Agent Health**
 ```bash
-# Check connections periodically
-npm run demo:hcs10 connections
+# Check logs for successful initialization
+# Monitor balance validation outputs
+# Verify transaction execution in HashScan
 ```
 
 ### Docker Deployment
@@ -501,93 +318,44 @@ COPY package*.json ./
 RUN npm ci --only=production
 COPY . .
 RUN npm run build
-CMD ["npm", "run", "balancer:agent"]
+CMD ["npm", "start"]
 ```
 
-## 🤝 Integration Examples
+## 🤝 Integration with Lynx Governance Agent V2
 
-### Governance Agent Integration
+The Lynx Balancer Agent is designed to work seamlessly with the **[Lynx Governance Agent V2](https://github.com/0xPrimordia/lynx-governance-agentv2)**:
 
-See the [HCS-10 Agent Communication Guide](docs/HCS-10_Agent_Communication.md) for detailed integration examples with your governance agent.
-
-### Custom Message Handlers
-
-```typescript
-// Extend the balancer agent for custom message types
-class CustomBalancerAgent extends LynxBalancerAgent {
-  protected async handleIncomingMessage(messageContent: string): Promise<void> {
-    // Add custom message handling logic
-    if (messageContent.includes('CUSTOM_MESSAGE_TYPE')) {
-      await this.handleCustomMessage(messageContent);
-      return;
-    }
-    
-    // Fall back to default handling
-    await super.handleIncomingMessage(messageContent);
-  }
-  
-  private async handleCustomMessage(message: string): Promise<void> {
-    // Your custom logic here
-  }
-}
+### Architecture Overview
+```
+┌─────────────────────────┐    ┌─────────────────────────┐
+│   Governance Agent V2   │    │    Balancer Agent       │
+│                         │    │                         │
+│ • Parameter Management  │    │ • Portfolio Rebalancing │
+│ • Voting & Proposals    │    │ • Real-time Monitoring  │
+│ • Ratio Updates         │    │ • Transfer Execution    │
+└─────────────────────────┘    └─────────────────────────┘
+            │                              │
+            └──────────── Hedera ──────────┘
+                     Contract State
 ```
 
-### V3 Hedera Agent Kit Integration
+### Key Integration Points
+- **Shared Contract**: Both agents interact with the same governance contract
+- **Real-time Ratios**: Balancer fetches live ratios set by governance agent
+- **Autonomous Operation**: Each agent operates independently while staying synchronized
 
-The new V3 approach uses LangChain agents with the Hedera Agent Kit:
-
-```typescript
-// Initialize V3 Hedera Agent Kit
-const client = Client.forTestnet().setOperator(
-  process.env.ACCOUNT_ID,
-  PrivateKey.fromStringDer(process.env.PRIVATE_KEY),
-);
-
-const hederaAgentToolkit = new HederaLangchainToolkit({
-  client,
-  configuration: {
-    tools: [] // Load all available tools
-  },
-});
-
-// Initialize OpenAI LLM (cost-efficient with GPT-4o-mini)
-const llm = new ChatOpenAI({
-  modelName: 'gpt-4o-mini',
-  temperature: 0,  // Deterministic for financial calculations
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Create the agent prompt template
-const prompt = ChatPromptTemplate.fromMessages([
-  ['system', 'You are a treasury balancer agent...'],
-  ['placeholder', '{chat_history}'],
-  ['human', '{input}'],
-  ['placeholder', '{agent_scratchpad}'],
-]);
-
-// Fetch tools from toolkit
-const tools = hederaAgentToolkit.getTools();
-
-// Create the underlying agent
-const agent = createToolCallingAgent({
-  llm,
-  tools,
-  prompt,
-});
-
-// Wrap everything in an executor that will maintain memory
-const agentExecutor = new AgentExecutor({
-  agent,
-  tools,
-});
-```
+### Example Integration Flow
+1. **Governance Agent** updates portfolio ratios via governance contract
+2. **Balancer Agent** detects ratio changes during regular monitoring
+3. **Automatic Rebalancing** executes transfers to match new target allocations
+4. **Complete Transparency** with full audit trail of all operations
 
 ## 📚 Documentation
 
-- [Treasury Balancer Implementation Plan](docs/TREASURY_BALANCER_IMPLEMENTATION_PLAN.md)
-- [HCS-10 Agent Communication Setup](docs/HCS-10_Agent_Communication.md)
-- [Agent-to-Agent Messaging Guide](docs/AGENT_TO_AGENT_MESSAGING.md)
-- [VM Deployment Guide](docs/VM_DEPLOYMENT.md)
+For additional documentation and examples, check the `docs/` directory:
+- Implementation details and architecture decisions
+- Deployment guides and best practices  
+- Integration examples with governance systems
 
 ## 🤝 Contributing
 
@@ -605,9 +373,13 @@ This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENS
 
 For questions and support:
 - Review the documentation in the `docs/` directory
-- Check the examples in `src/examples/`
-- Run the demo: `npm run demo:hcs10 demo`
+- Check the implementation examples in the source code
+- Test functionality with `npm run test:balancing`
+
+## 🔗 Related Projects
+
+- **[Lynx Governance Agent V2](https://github.com/0xPrimordia/lynx-governance-agentv2)** - Companion governance agent for parameter management
 
 ---
 
-**Built with ❤️ using Hedera Hashgraph, HCS-10 Protocol, and the V3 Hedera Agent Kit** 
+**Built with ❤️ using Hedera Hashgraph, LangChain, and the Hedera Agent Kit V3** 

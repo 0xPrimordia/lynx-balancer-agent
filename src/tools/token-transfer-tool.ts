@@ -12,7 +12,8 @@ class TokenTransferTool extends StructuredTool {
     tokenId: z.string().describe('The token ID to transfer (e.g., 0.0.1234567)'),
     fromAccountId: z.string().describe('The source account ID'),
     toAccountId: z.string().describe('The destination account ID (can be contract)'),
-    amount: z.string().describe('Amount to transfer in human-readable units (e.g., "34.199932" for USDC)')
+    amount: z.string().describe('Amount to transfer - accepts both decimal (e.g., "34.199932") and raw units (e.g., "34199932000000")'),
+    isRawUnits: z.boolean().optional().default(false).describe('Whether amount is already in raw units (true) or decimal units (false, default)')
   });
 
   constructor(private client: Client) {
@@ -21,7 +22,7 @@ class TokenTransferTool extends StructuredTool {
 
   async _call(input: any): Promise<string> {
     try {
-      const { tokenId, fromAccountId, toAccountId, amount } = input;
+      const { tokenId, fromAccountId, toAccountId, amount, isRawUnits = false } = input;
 
       console.log(`🪙 Transferring ${amount} units of token ${tokenId}`);
       console.log(`📤 From: ${fromAccountId}`);
@@ -33,9 +34,13 @@ class TokenTransferTool extends StructuredTool {
         
         // Convert HBAR to tinybars
         const humanAmount = parseFloat(amount);
-        const tinybars = Math.round(humanAmount * 100000000); // 1 HBAR = 100,000,000 tinybars
+        const tinybars = isRawUnits ? Math.round(humanAmount) : Math.round(humanAmount * 100000000); // 1 HBAR = 100,000,000 tinybars
         
-        console.log(`🔄 Converting ${humanAmount} HBAR to ${tinybars} tinybars`);
+        if (isRawUnits) {
+          console.log(`🔄 Using ${humanAmount} as raw tinybars`);
+        } else {
+          console.log(`🔄 Converting ${humanAmount} HBAR to ${tinybars} tinybars`);
+        }
 
         // Create HBAR transfer transaction
         const transferTx = new TransferTransaction()
@@ -65,11 +70,15 @@ class TokenTransferTool extends StructuredTool {
         
         console.log(`🔍 Token ${tokenId} has ${decimals} decimals`);
 
-        // Convert human-readable amount to smallest units
+        // Convert to smallest units if needed
         const humanAmount = parseFloat(amount);
-        const smallestUnits = Math.round(humanAmount * Math.pow(10, decimals));
+        const smallestUnits = isRawUnits ? Math.round(humanAmount) : Math.round(humanAmount * Math.pow(10, decimals));
         
-        console.log(`🔄 Converting ${humanAmount} to ${smallestUnits} smallest units`);
+        if (isRawUnits) {
+          console.log(`🔄 Using ${humanAmount} as raw units`);
+        } else {
+          console.log(`🔄 Converting ${humanAmount} to ${smallestUnits} smallest units`);
+        }
 
         // Create the transfer transaction
         const transferTx = new TransferTransaction()
