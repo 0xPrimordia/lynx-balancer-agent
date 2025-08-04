@@ -5,79 +5,59 @@
 ╚═══════════════════════════════════════════════════════════════╝
 ```
 
-**Intelligent Treasury Rebalancing Agent** - A hybrid AI agent that combines structured data processing with intelligent reasoning to autonomously manage tokenized index fund treasuries on Hedera blockchain.
+**Autonomous Treasury Rebalancing Agent** - Automatically maintains tokenized index fund treasury balances on Hedera blockchain by monitoring contract ratios and executing transfers when needed.
 
 **🤝 Works with:** [Lynx Governance Agent V2](https://github.com/0xPrimordia/lynx-governance-agentv2) - The companion governance agent that manages portfolio parameters and triggers rebalancing operations.
 
 ## 🎯 Overview
 
-The Lynx Balancer Agent uses a **hybrid approach** that combines structured data processing with intelligent reasoning. The agent fetches real blockchain data through dedicated utilities, performs precise mathematical calculations, and uses AI reasoning for transfer execution decisions.
-
-### 🚀 **Hybrid Approach - What Makes This Special**
-
-This agent combines the best of both worlds:
-- **🔧 Structured Data Processing**: Dedicated utilities for reliable blockchain data fetching
-- **🧮 Precise Calculations**: Mathematical analysis tools for accurate balance computations
-- **🧠 Intelligent Reasoning**: AI-driven decision making for transfer execution
-- **📊 Real-time Monitoring**: Live contract state tracking with automatic refresh
-- **💬 Transparent Operations**: Clear logging of all decisions and actions
+The Lynx Balancer Agent automatically rebalances treasury portfolios by:
+1. **Fetching real-time data** from Hedera blockchain contracts
+2. **Calculating required balances** based on governance-set ratios
+3. **Executing transfers** when balances deviate from targets
+4. **Providing complete transparency** of all operations
 
 ### Key Features
 
-- ✅ **Reliable Data Fetching**: Structured utilities for consistent blockchain data retrieval
-- ✅ **Precise Mathematical Analysis**: Dedicated tools for accurate balance calculations
-- ✅ **Intelligent Transfer Execution**: AI-driven decision making for optimal rebalancing
-- ✅ **Real-time State Management**: Automatic contract state refresh after operations
-- ✅ **Cost-Efficient**: Uses GPT-4o-mini for production-ready economics
-- ✅ **Comprehensive Logging**: Detailed visibility into all operations and decisions
-- ✅ **Flexible Tool Integration**: Supports both decimal and raw unit transfers
-- ✅ **Dashboard Notifications**: Automatic alerts when rebalancing is completed
+- ✅ **Real-time Monitoring**: Continuously checks contract balances against target ratios
+- ✅ **Automatic Transfers**: Executes HBAR and token transfers to maintain balance
+- ✅ **Precise Calculations**: Uses mathematical formulas to determine exact transfer amounts
+- ✅ **Tolerance Checking**: Only rebalances when deviation exceeds 5% threshold
+- ✅ **Complete Logging**: Detailed audit trail of all decisions and actions
+- ✅ **Flexible Units**: Supports both decimal and raw token unit transfers
+- ✅ **Dashboard Integration**: Sends notifications when rebalancing completes
 
-## 📋 **Agent Operation Example**
+## 📋 **How It Works**
 
-See how the agent processes rebalancing:
+The agent follows this process for each token in the portfolio:
 
 ```
-🔍 Starting treasury validation with sequential token processing...
-🔄 Fetching complete contract state...
+🔍 Starting treasury validation...
+🔄 Fetching contract state and ratios...
 ✅ Contract ratios: { HBAR: 50, WBTC: 3, SAUCE: 7, USDC: 20, JAM: 10, HEADSTART: 10 }
 ✅ LYNX total supply: 40 tokens
-✅ Contract HBAR balance: 162 HBAR
-✅ Contract token balances: SAUCE=12.8, WBTC=95.06, USDC=95.2, JAM=21, HEADSTART=2.114
+✅ Current balances: HBAR=162, WBTC=95.06, SAUCE=12.8, USDC=95.2, JAM=21, HEADSTART=2.114
 
 🔍 Processing HBAR...
-📊 HBAR Analysis: HBAR: Current=162, Required=200.00, Diff=19.0% (REBALANCE NEEDED)
+📊 HBAR Analysis: Current=162, Required=200.00, Diff=19.0% (REBALANCE NEEDED)
 ⚖️ HBAR needs rebalancing - executing transfer...
 🪙 Transferring 38 units of HBAR to contract...
 ✅ HBAR Transfer: Successfully transferred 38 HBAR to governance contract
 
 🔍 Processing WBTC...
-📊 WBTC Analysis: WBTC: Current=95.06, Required=12.00, Diff=692.2% (REBALANCE NEEDED)
+📊 WBTC Analysis: Current=95.06, Required=12.00, Diff=692.2% (REBALANCE NEEDED)
 ⚖️ WBTC needs rebalancing - executing transfer...
 🪙 Withdrawing 83.06 WBTC from contract...
 ✅ WBTC Transfer: Successfully withdrawn 83.06 WBTC from governance contract
 
 ✅ Sequential token processing completed
-🔄 Transfers were made - refreshing contract state...
+🔄 Refreshing contract state after transfers...
 📊 Updated State Summary: [Fresh contract state after transfers]
 📡 Sending rebalancing notification to dashboard...
 ✅ Dashboard notification sent successfully
 ```
 
-**🎯 Hybrid Efficiency**: Structured data processing ensures reliability, while AI reasoning handles complex transfer decisions.
-
-## 🤔 **Hybrid vs Traditional Approach**
-
-| **Traditional Treasury Systems** | **Our Hybrid Approach** |
-|--------------------------------|----------------------------|
-| ❌ Complex parsing and JSON structures | ✅ Structured data processing with AI reasoning |
-| ❌ Rigid rule-based logic | ✅ Flexible AI-driven decision making |
-| ❌ Hidden calculations | ✅ Transparent mathematical analysis |
-| ❌ Black box operations | ✅ Clear logging and state management |
-| ❌ Hard to debug/audit | ✅ Comprehensive audit trail |
-| ❌ Brittle when things change | ✅ Adaptable with reliable data processing |
-
-**🧠 How It Works**: We combine structured utilities for reliable data fetching and mathematical analysis with AI reasoning for intelligent transfer decisions. This ensures both accuracy and flexibility.
+**Balance Calculation Formula**: `Required Balance = (LYNX Supply × Target Ratio) ÷ 10`
 
 ## 🚀 Quick Start
 
@@ -85,7 +65,7 @@ See how the agent processes rebalancing:
 
 1. **Node.js 20+** installed
 2. **Hedera Testnet Account** with HBAR balance
-3. **OpenAI API Key** for AI agent functionality
+3. **OpenAI API Key** for agent functionality
 4. **[Lynx Governance Agent V2](https://github.com/0xPrimordia/lynx-governance-agentv2)** - Optional for automated governance integration
 
 ### Installation
@@ -154,15 +134,13 @@ The agent will:
 4. **Execute transfers** automatically for out-of-balance tokens
 5. **Report everything** with complete transparency
 
-**💰 Cost Efficient**: Uses GPT-4o-mini (~60% cheaper than GPT-4o) while maintaining full functionality.
-
 ### 🔄 **Agent Operation**
 
 The agent provides complete transparency in its operations:
 
 ```bash
 # The agent shows exactly what it's doing:
-🔍 Validating treasury ratios using pure agent approach...
+🔍 Validating treasury ratios...
 ✅ Contract ratios retrieved: { HBAR: '40', SAUCE: '25', ... }
 ✅ Token supply retrieved: 38 (3800000000 raw units, 8 decimals)
 📄 Agent Response: [Complete step-by-step analysis]
@@ -203,7 +181,7 @@ npm run lint:fix               # Fix ESLint issues
 
 ### Agent Architecture
 
-The Lynx Balancer Agent uses a **hybrid approach** combining structured utilities with AI reasoning:
+The Lynx Balancer Agent uses a modular architecture for reliable treasury management:
 
 - **Hedera Agent Kit V3**: Direct blockchain tool integration
 - **LangChain Agent Framework**: Intelligent reasoning and tool calling
