@@ -43,6 +43,26 @@ export class TokenRatioTool extends StructuredTool {
         balanceStatus = input.currentBalance > requiredBalance ? 'EXCESS' : 'DEFICIT';
       }
 
+      // Calculate transfer parameters
+      let transferParams: { action: string; amount: number; tool: string } | null = null;
+      if (needsRebalancing) {
+        if (balanceStatus === 'EXCESS') {
+          // Need to withdraw excess from contract
+          transferParams = {
+            action: 'withdraw',
+            amount: Number(difference.toFixed(4)),
+            tool: input.tokenSymbol === 'HBAR' ? 'hbar_withdrawal_tool' : 'token_withdrawal_tool'
+          };
+        } else if (balanceStatus === 'DEFICIT') {
+          // Need to deposit deficit to contract
+          transferParams = {
+            action: 'deposit',
+            amount: Number(difference.toFixed(4)),
+            tool: input.tokenSymbol === 'HBAR' ? 'transfer_hbar' : 'token_transfer_tool'
+          };
+        }
+      }
+
       const result = {
         tokenSymbol: input.tokenSymbol,
         status: status,
@@ -53,6 +73,7 @@ export class TokenRatioTool extends StructuredTool {
         diffPercent: Number(diffPercent.toFixed(2)),
         tolerancePercent: input.tolerancePercent || 5,
         needsRebalancing: needsRebalancing,
+        transferParams: transferParams,
         analysis: `${input.tokenSymbol}: Current=${input.currentBalance}, Required=${requiredBalance.toFixed(2)}, Diff=${diffPercent.toFixed(1)}% (${needsRebalancing ? 'REBALANCE NEEDED' : 'OK'})`
       };
 
