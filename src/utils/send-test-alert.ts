@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Suppress noisy warnings and errors
-import './suppress-warnings.js';
+import '../suppress-warnings';
 
 import { config } from 'dotenv';
 import { ChatOpenAI } from '@langchain/openai';
@@ -39,7 +39,7 @@ class SimpleAlertSender {
     const requiredVars = [
       'HEDERA_ACCOUNT_ID',
       'HEDERA_PRIVATE_KEY', 
-      'OPENAI_API_KEY'
+      'AI_GATEWAY_API_KEY'
     ];
     
     const missingVars = requiredVars.filter(varName => !env[varName]);
@@ -62,11 +62,14 @@ class SimpleAlertSender {
         }
       });
 
-      // Initialize OpenAI LLM
+      // Initialize OpenAI LLM (same as main agent)
       const llm = new ChatOpenAI({
-        modelName: "gpt-4o",
-        temperature: 0,
-        apiKey: env.OPENAI_API_KEY,
+        modelName: "gpt-4o-mini",           // or "gpt-4o", "gpt-3.5-turbo", etc.
+        temperature: 0,                     // 0 = deterministic, 1 = creative
+        configuration: {
+            baseURL: "https://ai-gateway.vercel.sh/v1",  // Vercel AI Gateway
+        },
+        apiKey: env.AI_GATEWAY_API_KEY!,         // Your Vercel AI Gateway key
       });
 
       // Create simple prompt for topic messaging
@@ -95,10 +98,10 @@ class SimpleAlertSender {
         maxIterations: 10
       });
 
-      // Create topic if BALANCER_ALERT_TOPIC_ID is empty
-      let topicId = env.BALANCER_ALERT_TOPIC_ID;
+      // Create topic if BALANCER_ALERT_TOPIC is empty
+      let topicId = env.BALANCER_ALERT_TOPIC;
       if (!topicId || topicId.trim() === '') {
-        console.log("🔧 BALANCER_ALERT_TOPIC_ID is empty, creating new topic...");
+        console.log("🔧 BALANCER_ALERT_TOPIC is empty, creating new topic...");
         
         const createTopicResponse = await this.agentExecutor.invoke({
           input: `Create a new HCS topic for balancer alerts with memo "Lynx DAO Balancer Alerts Topic"`
@@ -111,7 +114,7 @@ class SimpleAlertSender {
         if (topicMatch) {
           topicId = topicMatch[0];
           console.log(`✅ Created new topic: ${topicId}`);
-          console.log(`🔧 Please add this to your .env file: BALANCER_ALERT_TOPIC_ID=${topicId}`);
+          console.log(`🔧 Please add this to your .env file: BALANCER_ALERT_TOPIC=${topicId}`);
         } else {
           throw new Error("Failed to extract topic ID from creation response");
         }

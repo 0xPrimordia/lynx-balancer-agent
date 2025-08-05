@@ -7,6 +7,7 @@ import { Client, TopicMessageQuery, Timestamp } from '@hashgraph/sdk';
 import { HederaLangchainToolkit, AgentMode, coreHTSPlugin, coreAccountPlugin, coreConsensusPlugin, coreQueriesPlugin } from 'hedera-agent-kit';
 import { TokenTransferTool } from '../tools/token-transfer-tool.js';
 import { HbarWithdrawalTool } from '../tools/hbar-withdrawal-tool.js';
+import { TokenWithdrawalTool } from '../tools/token-withdrawal-tool.js';
 
 import { ContractRatioTool, TokenSupplyTool } from '../tools/contract-ratio-tool.js';
 import { TokenRatioTool } from '../tools/token-ratio-tool.js';
@@ -65,6 +66,9 @@ export class LynxBalancerAgent {
   private hederaAgentToolkit?: HederaLangchainToolkit;
   private agentExecutor?: AgentExecutor;
   private client?: Client;
+  
+  // Flow control
+  private isRebalancingInProgress: boolean = false;
 
   constructor() {
     this.env = process.env as NodeJS.ProcessEnv & EnvironmentConfig;
@@ -76,10 +80,25 @@ export class LynxBalancerAgent {
    * This is the main rebalancing function that can be called from startup or alerts
    */
   async executeRebalancing(): Promise<void> {
-    console.log("⚖️  Executing portfolio rebalancing...");
-    console.log("🔄 Starting treasury ratio validation...");
-    await this.validateTreasuryRatios();
-    console.log("✅ Treasury ratio validation completed");
+    // Prevent concurrent rebalancing operations
+    if (this.isRebalancingInProgress) {
+      console.log("⚠️  Rebalancing already in progress - ignoring this request");
+      return;
+    }
+    
+    try {
+      this.isRebalancingInProgress = true;
+      console.log("🔒 Rebalancing lock acquired");
+      
+      console.log("⚖️  Executing portfolio rebalancing...");
+      console.log("🔄 Starting treasury ratio validation...");
+      await this.validateTreasuryRatios();
+      console.log("✅ Treasury ratio validation completed");
+      
+    } finally {
+      this.isRebalancingInProgress = false;
+      console.log("🔓 Rebalancing lock released");
+    }
   }
 
   /**
@@ -128,15 +147,32 @@ export class LynxBalancerAgent {
         console.log(`📊 ${tokenSymbol} Analysis:`, analysis.analysis);
 
         // If this token needs rebalancing, handle it immediately
-        if (analysis.needsRebalancing) {
+        if (analysis.needsRebalancing && analysis.transferParams) {
           console.log(`⚖️  ${tokenSymbol} needs rebalancing - executing transfer...`);
+          
+          const { action, amount, tool } = analysis.transferParams;
+          const tokenConfig = this.TOKEN_CONFIG[tokenSymbol as keyof typeof this.TOKEN_CONFIG];
+          
+          let transferInstructions = '';
+          if (action === 'withdraw') {
+            if (tokenSymbol === 'HBAR') {
+              transferInstructions = `Use ${tool} with:
+- contractId: ${this.env.LYNX_CONTRACT_ID}
+- amount: ${amount * 100000000} (${amount} HBAR in tinybars)`;
+            } else {
+              transferInstructions = `Use ${tool} with:
+- contractId: ${this.env.LYNX_CONTRACT_ID}
+- tokenId: ${tokenConfig?.tokenId}
+- amount: ${amount * Math.pow(10, tokenConfig?.decimals || 0)} (${amount} ${tokenSymbol} in smallest units)`;
+            }
+          } else if (action === 'deposit') {
+            transferInstructions = `Use ${tool} to transfer ${amount} ${tokenSymbol} FROM operator TO contract`;
+          }
           
           const transferResponse = await this.agentExecutor.invoke({
             input: `${tokenSymbol} is out of balance. Current: ${currentBalance}, Required: ${analysis.requiredBalance}, Status: ${analysis.balanceStatus}.
 
-Execute the appropriate transfer for ${tokenSymbol}:
-- If EXCESS: Use ${tokenSymbol === 'HBAR' ? 'hbar_withdrawal_tool' : 'token_transfer_tool'} to transfer excess FROM contract TO operator
-- If DEFICIT: Use ${tokenSymbol === 'HBAR' ? 'transfer_hbar' : 'token_transfer_tool'} to transfer FROM operator TO contract
+${transferInstructions}
 
 Fix ${tokenSymbol} balance now.`
           });
@@ -270,12 +306,13 @@ Fix ${tokenSymbol} balance now.`
       const hederaTools = this.hederaAgentToolkit.getTools();
       const tokenTransferTool = new TokenTransferTool(this.client);
       const hbarWithdrawalTool = new HbarWithdrawalTool(this.client);
+      const tokenWithdrawalTool = new TokenWithdrawalTool(this.client);
 
       const contractRatioTool = new ContractRatioTool(this.client);
       const tokenSupplyTool = new TokenSupplyTool(this.client);
       const tokenRatioTool = new TokenRatioTool();
       // Using built-in get-topic-messages-query instead of custom topic query tool
-      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, contractRatioTool, tokenSupplyTool, tokenRatioTool];
+      const allTools = [...hederaTools, tokenTransferTool, hbarWithdrawalTool, tokenWithdrawalTool, contractRatioTool, tokenSupplyTool, tokenRatioTool];
 
       // Create the tool-calling agent (following tool-calling-balance-check pattern)
       const agent = await createToolCallingAgent({
@@ -391,6 +428,12 @@ Fix ${tokenSymbol} balance now.`
               console.log("🚨 New topic message received!");
               console.log(`📨 Message: ${Buffer.from(message.contents).toString("utf8")}`);
               console.log(`🕒 Timestamp: ${new Date(message.consensusTimestamp.toDate())}`);
+              
+              // Check if rebalancing is already in progress
+              if (this.isRebalancingInProgress) {
+                console.log("⚠️  Rebalancing already in progress - ignoring this alert");
+                return;
+              }
               
               // Execute rebalancing in response to the alert
               console.log("🚨 Alert detected - executing rebalancing...");
